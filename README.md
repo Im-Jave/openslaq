@@ -58,13 +58,11 @@ Open [http://localhost:3000](http://localhost:3000).
 | Member roles | :white_check_mark: | :white_check_mark: |
 | **UI** | | |
 | Dark mode | :white_check_mark: | :white_check_mark: |
-| Syntax-highlighted code blocks | :white_check_mark: | :white_check_mark: |
+| Syntax-highlighted code blocks | - | :white_check_mark: |
 | **Platform** | | |
 | Self-hosted | — | :white_check_mark: |
 | Open source | — | :white_check_mark: |
 | Bots & integrations | :white_check_mark: | — |
-| Workflow builder | :white_check_mark: | — |
-| Enterprise SSO/SAML | :white_check_mark: | — |
 
 ## Screenshots
 
