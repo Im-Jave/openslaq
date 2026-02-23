@@ -1,0 +1,15 @@
+node_modules
+dist
+.env
+*.local
+.vite
+drizzle
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+coverage/
+coverage-raw/
+railway.json
+.dev.log
+.dev.pid

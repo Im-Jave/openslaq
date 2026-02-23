@@ -1,0 +1,18 @@
+import { StackServerApp } from "@stackframe/js";
+import { env } from "../env";
+
+let instance: StackServerApp | null = null;
+
+export function getStackServerApp(): StackServerApp {
+  if (!env.STACK_SECRET_SERVER_KEY) {
+    throw new Error("STACK_SECRET_SERVER_KEY is not configured");
+  }
+  if (!instance) {
+    instance = new StackServerApp({
+      projectId: env.VITE_STACK_PROJECT_ID,
+      secretServerKey: env.STACK_SECRET_SERVER_KEY,
+      tokenStore: "memory",
+    });
+  }
+  return instance;
+}

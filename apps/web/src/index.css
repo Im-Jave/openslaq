@@ -1,0 +1,129 @@
+@import "tailwindcss";
+@import "@fontsource-variable/inter";
+
+@theme {
+  --color-slack-blue: #1264a3;
+  --color-slack-green: #007a5a;
+
+  --color-surface: var(--surface);
+  --color-surface-secondary: var(--surface-secondary);
+  --color-surface-tertiary: var(--surface-tertiary);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-selected: var(--surface-selected);
+
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-text-faint: var(--text-faint);
+
+  --color-border-default: var(--border-default);
+  --color-border-secondary: var(--border-secondary);
+  --color-border-strong: var(--border-strong);
+  --color-border-input: var(--border-input);
+
+  --color-danger-bg: var(--danger-bg);
+  --color-danger-border: var(--danger-border);
+  --color-danger-text: var(--danger-text);
+
+  --color-code-inline-bg: var(--code-inline-bg);
+  --color-mark-bg: var(--mark-bg);
+  --color-avatar-fallback-bg: var(--avatar-fallback-bg);
+  --color-avatar-fallback-text: var(--avatar-fallback-text);
+}
+
+:root {
+  --surface: #ffffff;
+  --surface-secondary: #f9fafb;
+  --surface-tertiary: #f3f4f6;
+  --surface-hover: #f3f4f6;
+  --surface-selected: #eff6ff;
+
+  --text-primary: #111827;
+  --text-secondary: #374151;
+  --text-muted: #6b7280;
+  --text-faint: #9ca3af;
+
+  --border-default: #e5e7eb;
+  --border-secondary: #f3f4f6;
+  --border-strong: #d1d5db;
+  --border-input: #9ca3af;
+
+  --danger-bg: #fef2f2;
+  --danger-border: #fecaca;
+  --danger-text: #b91c1c;
+
+  --highlight-bg: rgb(254 249 195);
+  --code-inline-bg: #f3f4f6;
+  --mark-bg: #fef08a;
+  --avatar-fallback-bg: #e5e7eb;
+  --avatar-fallback-text: #6b7280;
+}
+
+.dark {
+  --surface: #1a1d21;
+  --surface-secondary: #222529;
+  --surface-tertiary: #2c2f33;
+  --surface-hover: #2c2f33;
+  --surface-selected: #1e3a5f;
+
+  --text-primary: #e5e7eb;
+  --text-secondary: #d1d5db;
+  --text-muted: #9ca3af;
+  --text-faint: #6b7280;
+
+  --border-default: #374151;
+  --border-secondary: #2c2f33;
+  --border-strong: #4b5563;
+  --border-input: #4b5563;
+
+  --danger-bg: #450a0a;
+  --danger-border: #7f1d1d;
+  --danger-text: #fca5a5;
+
+  --highlight-bg: rgb(133 77 14 / 0.3);
+  --code-inline-bg: #2c2f33;
+  --mark-bg: #854d0e;
+  --avatar-fallback-bg: #374151;
+  --avatar-fallback-text: #9ca3af;
+}
+
+body {
+  font-family: "Inter Variable", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--surface);
+  color: var(--text-primary);
+}
+
+@keyframes highlight-fade {
+  0% { background-color: var(--highlight-bg); }
+  100% { background-color: transparent; }
+}
+
+.highlight-fade {
+  animation: highlight-fade 2s ease-out;
+}
+
+/* Hide Stack Auth's "Account settings" item from UserButton dropdown */
+.stack-scope [role="menuitem"]:has(svg.lucide-circle-user) {
+  display: none;
+}
+
+/* Make UserButton trigger full width (only inside sidebar wrapper) */
+.user-button-full-width button.stack-scope.rounded-lg {
+  width: 100%;
+}
+
+/* Shiki dual-theme: swap to dark CSS variables when .dark is active */
+.dark .shiki {
+  color: var(--shiki-dark) !important;
+  background-color: var(--shiki-dark-bg, #1e1e1e) !important;
+}
+
+.dark .shiki span {
+  color: var(--shiki-dark) !important;
+  background-color: var(--shiki-dark-bg) !important;
+  font-style: var(--shiki-dark-font-style) !important;
+  font-weight: var(--shiki-dark-font-weight) !important;
+  text-decoration: var(--shiki-dark-text-decoration) !important;
+}

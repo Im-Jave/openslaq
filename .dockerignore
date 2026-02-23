@@ -1,0 +1,15 @@
+node_modules
+.git
+.dev.log
+.dev.pid
+.env
+.env.*
+!.env.example
+# Exclude e2e test source but keep package.json for lockfile compat
+apps/api-e2e/tests
+apps/api-e2e/tsconfig.json
+apps/web-e2e/tests
+apps/web-e2e/tsconfig.json
+apps/web-e2e/playwright.config.ts
+apps/web/dist
+*.tsbuildinfo

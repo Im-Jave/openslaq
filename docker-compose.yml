@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:17
+    ports:
+      - "3002:5432"
+    environment:
+      POSTGRES_DB: openslack
+      POSTGRES_USER: openslack
+      POSTGRES_PASSWORD: openslack
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  s3mock:
+    image: adobe/s3mock
+    ports:
+      - "3003:9090"
+    environment:
+      COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: openslack-uploads
+
+volumes:
+  pgdata:

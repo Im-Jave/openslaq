@@ -1,0 +1,160 @@
+import { eq, and, count, or, exists } from "drizzle-orm";
+import { db } from "../db";
+import { channels, channelMembers } from "./schema";
+import { users } from "../users/schema";
+import type { Channel, ChannelId, ChannelType, WorkspaceId, UserId } from "@openslack/shared";
+import { asChannelId, asWorkspaceId, asUserId, CHANNEL_TYPES } from "@openslack/shared";
+
+function toChannel(row: typeof channels.$inferSelect, memberCount?: number): Channel {
+  return {
+    id: asChannelId(row.id),
+    workspaceId: asWorkspaceId(row.workspaceId),
+    name: row.name,
+    type: row.type as Channel["type"],
+    description: row.description,
+    createdBy: row.createdBy ? asUserId(row.createdBy) : null,
+    createdAt: row.createdAt.toISOString(),
+    memberCount,
+  };
+}
+
+export async function listChannels(workspaceId: WorkspaceId, userId: UserId): Promise<Channel[]> {
+  const memberSubquery = db
+    .select()
+    .from(channelMembers)
+    .where(
+      and(
+        eq(channelMembers.channelId, channels.id),
+        eq(channelMembers.userId, userId),
+      ),
+    );
+
+  const rows = await db
+    .select({
+      channel: channels,
+      memberCount: count(channelMembers.userId),
+    })
+    .from(channels)
+    .leftJoin(channelMembers, eq(channels.id, channelMembers.channelId))
+    .where(
+      and(
+        eq(channels.workspaceId, workspaceId),
+        or(
+          eq(channels.type, CHANNEL_TYPES.PUBLIC),
+          and(eq(channels.type, CHANNEL_TYPES.PRIVATE), exists(memberSubquery)),
+        ),
+      ),
+    )
+    .groupBy(channels.id)
+    .orderBy(channels.createdAt);
+
+  return rows.map((r) => toChannel(r.channel, r.memberCount));
+}
+
+export async function createChannel(
+  workspaceId: WorkspaceId,
+  name: string,
+  description: string | undefined,
+  userId: UserId,
+  type: ChannelType = CHANNEL_TYPES.PUBLIC,
+): Promise<Channel> {
+  const [channel] = await db
+    .insert(channels)
+    .values({
+      workspaceId,
+      name,
+      description,
+      type,
+      createdBy: userId,
+    })
+    .returning();
+
+  if (!channel) throw new Error("Failed to insert channel");
+
+  // Auto-join creator to the channel
+  await db.insert(channelMembers).values({
+    channelId: channel.id,
+    userId,
+  });
+
+  return toChannel(channel);
+}
+
+export async function joinChannel(channelId: ChannelId, userId: UserId): Promise<void> {
+  await db
+    .insert(channelMembers)
+    .values({ channelId, userId })
+    .onConflictDoNothing();
+}
+
+export async function getChannelById(channelId: ChannelId): Promise<Channel | null> {
+  const row = await db.query.channels.findFirst({
+    where: eq(channels.id, channelId),
+  });
+  return row ? toChannel(row) : null;
+}
+
+export async function isChannelMember(channelId: ChannelId, userId: UserId): Promise<boolean> {
+  const row = await db
+    .select({ channelId: channelMembers.channelId })
+    .from(channelMembers)
+    .where(
+      and(
+        eq(channelMembers.channelId, channelId),
+        eq(channelMembers.userId, userId),
+      ),
+    )
+    .limit(1);
+  return row.length > 0;
+}
+
+export async function leaveChannel(channelId: ChannelId, userId: UserId): Promise<void> {
+  await db
+    .delete(channelMembers)
+    .where(
+      and(
+        eq(channelMembers.channelId, channelId),
+        eq(channelMembers.userId, userId),
+      ),
+    );
+}
+
+export async function addChannelMember(channelId: ChannelId, userId: UserId): Promise<void> {
+  await db
+    .insert(channelMembers)
+    .values({ channelId, userId })
+    .onConflictDoNothing();
+}
+
+export async function removeChannelMember(channelId: ChannelId, userId: UserId): Promise<void> {
+  await db
+    .delete(channelMembers)
+    .where(
+      and(
+        eq(channelMembers.channelId, channelId),
+        eq(channelMembers.userId, userId),
+      ),
+    );
+}
+
+export async function listChannelMembers(channelId: ChannelId) {
+  const rows = await db
+    .select({
+      id: users.id,
+      displayName: users.displayName,
+      email: users.email,
+      avatarUrl: users.avatarUrl,
+      joinedAt: channelMembers.joinedAt,
+    })
+    .from(channelMembers)
+    .innerJoin(users, eq(channelMembers.userId, users.id))
+    .where(eq(channelMembers.channelId, channelId));
+
+  return rows.map((r) => ({
+    id: r.id,
+    displayName: r.displayName,
+    email: r.email,
+    avatarUrl: r.avatarUrl,
+    joinedAt: r.joinedAt.toISOString(),
+  }));
+}
