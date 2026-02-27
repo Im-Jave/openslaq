@@ -1,0 +1,4 @@
+[install]
+# Use hoisted node_modules layout so Node-based tooling
+# (Metro bundler, xcodebuild, Detox) can resolve packages.
+linker = "hoisted"

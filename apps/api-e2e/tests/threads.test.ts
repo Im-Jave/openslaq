@@ -1,7 +1,9 @@
 import { describe, test, expect, beforeAll } from "bun:test";
 import { createTestClient, createTestWorkspace, testId } from "./helpers/api-client";
 
-const BASE_URL = process.env.API_BASE_URL || "http://localhost:3001";
+function getBaseUrl() {
+  return process.env.API_BASE_URL || "http://localhost:3001";
+}
 
 describe("threads", () => {
   let client: Awaited<ReturnType<typeof createTestClient>>["client"];
@@ -164,7 +166,7 @@ describe("threads", () => {
     expect(msg.replyCount).toBeGreaterThanOrEqual(1);
   });
 
-  test("thread reply pagination with cursor", async () => {
+  test("thread reply pagination with cursor (default direction=older returns newest first)", async () => {
     // Create a fresh parent
     const parentRes = await client.api.workspaces[":slug"].channels[":id"].messages.$post({
       param: { slug, id: channelId },
@@ -184,21 +186,140 @@ describe("threads", () => {
       replyIds.push(r.id);
     }
 
-    // Fetch first page with limit=1 (raw fetch to ensure query params are sent)
-    const repliesUrl = `${BASE_URL}/api/workspaces/${slug}/channels/${channelId}/messages/${parent.id}/replies`;
+    // Fetch first page with limit=1 — default direction=older returns newest first
+    const repliesUrl = `${getBaseUrl()}/api/workspaces/${slug}/channels/${channelId}/messages/${parent.id}/replies`;
     const page1Res = await fetch(`${repliesUrl}?limit=1`, { headers });
     expect(page1Res.status).toBe(200);
     const page1 = (await page1Res.json()) as { messages: { id: string }[]; nextCursor: string | null };
     expect(page1.messages).toHaveLength(1);
+    // First result should be the newest reply (reply-2)
+    expect(page1.messages[0]!.id).toBe(replyIds[2]!);
     expect(page1.nextCursor).not.toBeNull();
 
-    // Fetch second page using cursor
+    // Fetch second page using cursor — should get next oldest
     const page2Res = await fetch(`${repliesUrl}?limit=1&cursor=${page1.nextCursor}`, { headers });
     expect(page2Res.status).toBe(200);
     const page2 = (await page2Res.json()) as { messages: { id: string }[]; nextCursor: string | null };
     expect(page2.messages).toHaveLength(1);
-    // Second page should have a different reply
-    expect(page2.messages[0]!.id).not.toBe(page1.messages[0]!.id);
+    expect(page2.messages[0]!.id).toBe(replyIds[1]!);
+  });
+
+  test("thread replies with direction=newer returns oldest first", async () => {
+    // Create a fresh parent
+    const parentRes = await client.api.workspaces[":slug"].channels[":id"].messages.$post({
+      param: { slug, id: channelId },
+      json: { content: `newer-parent-${testId()}` },
+    });
+    const parent = (await parentRes.json()) as { id: string };
+
+    // Create 3 replies with small delays
+    const replyIds: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      if (i > 0) await new Promise((r) => setTimeout(r, 50));
+      const rRes = await client.api.workspaces[":slug"].channels[":id"].messages[":messageId"].replies.$post({
+        param: { slug, id: channelId, messageId: parent.id },
+        json: { content: `newer-reply-${i}-${testId()}` },
+      });
+      const r = (await rRes.json()) as { id: string };
+      replyIds.push(r.id);
+    }
+
+    // Fetch with direction=newer — should return oldest first
+    const repliesUrl = `${getBaseUrl()}/api/workspaces/${slug}/channels/${channelId}/messages/${parent.id}/replies`;
+    const res = await fetch(`${repliesUrl}?direction=newer&limit=2`, { headers });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { messages: { id: string }[]; nextCursor: string | null };
+    expect(body.messages).toHaveLength(2);
+    // direction=newer returns ASC order: oldest first
+    expect(body.messages[0]!.id).toBe(replyIds[0]!);
+    expect(body.messages[1]!.id).toBe(replyIds[1]!);
+    expect(body.nextCursor).not.toBeNull();
+  });
+
+  test("thread replies are scoped to requested channel", async () => {
+    const otherChannelRes = await client.api.workspaces[":slug"].channels.$post({
+      param: { slug },
+      json: { name: `thread-other-${testId()}` },
+    });
+    expect(otherChannelRes.status).toBe(201);
+    const otherChannel = (await otherChannelRes.json()) as { id: string };
+
+    const otherParentRes = await client.api.workspaces[":slug"].channels[":id"].messages.$post({
+      param: { slug, id: otherChannel.id },
+      json: { content: `other-parent-${testId()}` },
+    });
+    expect(otherParentRes.status).toBe(201);
+    const otherParent = (await otherParentRes.json()) as { id: string };
+
+    const otherReplyRes = await client.api.workspaces[":slug"].channels[":id"].messages[":messageId"].replies.$post({
+      param: { slug, id: otherChannel.id, messageId: otherParent.id },
+      json: { content: `other-reply-${testId()}` },
+    });
+    expect(otherReplyRes.status).toBe(201);
+
+    // Mismatched route: request replies for parent from otherChannel via channelId
+    const leakAttemptRes = await client.api.workspaces[":slug"].channels[":id"].messages[":messageId"].replies.$get({
+      param: { slug, id: channelId, messageId: otherParent.id },
+      query: {},
+    });
+    expect(leakAttemptRes.status).toBe(200);
+    const leakAttempt = (await leakAttemptRes.json()) as { messages: { id: string }[]; nextCursor: string | null };
+    expect(leakAttempt.messages).toHaveLength(0);
+    expect(leakAttempt.nextCursor).toBeNull();
+  });
+
+  test("delete parent message — replies become orphaned", async () => {
+    // Create a fresh parent
+    const parentRes = await client.api.workspaces[":slug"].channels[":id"].messages.$post({
+      param: { slug, id: channelId },
+      json: { content: `orphan-parent-${testId()}` },
+    });
+    expect(parentRes.status).toBe(201);
+    const parent = (await parentRes.json()) as { id: string };
+
+    // Create 2 replies
+    const replyIds: string[] = [];
+    for (let i = 0; i < 2; i++) {
+      const rRes = await client.api.workspaces[":slug"].channels[":id"].messages[":messageId"].replies.$post({
+        param: { slug, id: channelId, messageId: parent.id },
+        json: { content: `orphan-reply-${i}-${testId()}` },
+      });
+      expect(rRes.status).toBe(201);
+      const r = (await rRes.json()) as { id: string };
+      replyIds.push(r.id);
+    }
+
+    // Delete the parent
+    const delRes = await client.api.messages[":id"].$delete({
+      param: { id: parent.id },
+    });
+    expect(delRes.status).toBe(200);
+
+    // Parent should be gone from channel messages
+    const listRes = await client.api.workspaces[":slug"].channels[":id"].messages.$get({
+      param: { slug, id: channelId },
+      query: {},
+    });
+    const body = (await listRes.json()) as { messages: { id: string }[] };
+    expect(body.messages.find((m) => m.id === parent.id)).toBeUndefined();
+
+    // Replies are orphaned — they still exist in DB but are not accessible
+    // via GET /api/messages/:id (because parentMessageId references deleted message,
+    // but the reply itself is still channel-member accessible)
+    // The replies still exist and are accessible since channel membership is intact
+    const reply1Res = await client.api.messages[":id"].$get({
+      param: { id: replyIds[0]! },
+    });
+    // Replies are still accessible (orphaned but not deleted — no cascade)
+    expect(reply1Res.status).toBe(200);
+    const reply1 = (await reply1Res.json()) as { id: string; parentMessageId: string };
+    expect(reply1.parentMessageId).toBe(parent.id);
+
+    // But the parent reference now points to a deleted message
+    const parentRes2 = await client.api.messages[":id"].$get({
+      param: { id: parent.id },
+    });
+    expect(parentRes2.status).toBe(404);
   });
 
   test("get nonexistent message → 404", async () => {

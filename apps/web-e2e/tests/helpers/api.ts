@@ -1,8 +1,8 @@
-import * as jose from "jose";
+import { hc } from "hono/client";
+import type { AppType } from "@openslaq/api/app";
+import { signTestJwt, type TestUser } from "@openslaq/test-utils";
 
 const API_BASE = "http://localhost:3001";
-const E2E_TEST_SECRET = "openslack-e2e-test-secret-do-not-use-in-prod";
-const PROJECT_ID = "924565c5-6377-44b7-aa75-6b7de8d311f4";
 
 export interface ApiUser {
   userId: string;
@@ -13,104 +13,48 @@ export interface ApiUser {
 export const DEFAULT_USER: ApiUser = {
   userId: "e2e-test-user-001",
   displayName: "Test User",
-  email: "test@openslack.dev",
+  email: "test@openslaq.dev",
 };
 
 export const SECOND_USER: ApiUser = {
   userId: "e2e-test-user-002",
   displayName: "Second User",
-  email: "second@openslack.dev",
+  email: "second@openslaq.dev",
 };
 
-export const SHOWCASE_ALICE: ApiUser = { userId: "Alice Johnson", displayName: "Alice Johnson", email: "alice@openslack.dev" };
-export const SHOWCASE_BOB: ApiUser = { userId: "Bob Martinez", displayName: "Bob Martinez", email: "bob@openslack.dev" };
-export const SHOWCASE_CAROL: ApiUser = { userId: "Carol Chen", displayName: "Carol Chen", email: "carol@openslack.dev" };
+export const SHOWCASE_ALICE: ApiUser = { userId: "Alice Johnson", displayName: "Alice Johnson", email: "alice@openslaq.dev" };
+export const SHOWCASE_BOB: ApiUser = { userId: "Bob Martinez", displayName: "Bob Martinez", email: "bob@openslaq.dev" };
+export const SHOWCASE_CAROL: ApiUser = { userId: "Carol Chen", displayName: "Carol Chen", email: "carol@openslaq.dev" };
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function toTestUser(user: ApiUser): TestUser {
+  return { id: user.userId, displayName: user.displayName, email: user.email, emailVerified: true };
 }
 
-async function signToken(user: ApiUser): Promise<string> {
-  const secret = new TextEncoder().encode(E2E_TEST_SECRET);
-  return new jose.SignJWT({
-    email: user.email,
-    name: user.displayName,
-    email_verified: true,
-    project_id: PROJECT_ID,
-    branch_id: "main",
-    refresh_token_id: `e2e-rt-${user.userId}`,
-    role: "authenticated",
-    selected_team_id: null,
-    is_anonymous: false,
-    is_restricted: false,
-    restricted_reason: null,
-  })
-    .setProtectedHeader({ alg: "HS256" })
-    .setSubject(user.userId)
-    .setIssuer(`https://api.stack-auth.com/api/v1/projects/${PROJECT_ID}`)
-    .setAudience(PROJECT_ID)
-    .setIssuedAt()
-    .setExpirationTime("1h")
-    .sign(secret);
-}
-
-interface Channel {
-  id: string;
-  name: string;
-  description: string | null;
-}
-
-interface Message {
-  id: string;
-  channelId: string;
-  userId: string;
-  content: string;
-  createdAt: string;
-  updatedAt: string;
+async function createRpcClient(user: ApiUser) {
+  const token = await signTestJwt(toTestUser(user));
+  return { client: hc<AppType>(API_BASE, { headers: { Authorization: `Bearer ${token}` } }), token };
 }
 
 export class ApiHelper {
-  private tokenPromise: Promise<string>;
+  private rpc: Promise<{ client: ReturnType<typeof hc<AppType>>; token: string }>;
   private workspaceSlug: string;
 
   constructor(user: ApiUser = DEFAULT_USER, workspaceSlug = "default") {
-    this.tokenPromise = signToken(user);
+    this.rpc = createRpcClient(user);
     this.workspaceSlug = workspaceSlug;
   }
 
-  private async request(path: string, init?: RequestInit): Promise<Response> {
-    const token = await this.tokenPromise;
-    const method = (init?.method ?? "GET").toUpperCase();
-    const maxAttempts = method === "GET" ? 5 : 6;
-
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        const res = await fetch(`${API_BASE}${path}`, {
-          ...init,
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-            ...init?.headers,
-          },
-        });
-
-        if (res.ok) return res;
-        const retriable = res.status === 404 || res.status === 408 || res.status === 429 || res.status >= 500;
-        if (!retriable || attempt === maxAttempts) return res;
-      } catch (error) {
-        if (attempt === maxAttempts) throw error;
-      }
-      await sleep(Math.min(250 * 2 ** (attempt - 1), 2000));
-    }
-
-    throw new Error(`Request failed unexpectedly: ${method} ${path}`);
+  private get slug() {
+    return this.workspaceSlug;
   }
 
-  async createWorkspace(name: string): Promise<{ id: string; name: string; slug: string }> {
-    const res = await this.request("/api/workspaces", {
-      method: "POST",
-      body: JSON.stringify({ name }),
-    });
+  private async c() {
+    return (await this.rpc).client;
+  }
+
+  async createWorkspace(name: string) {
+    const client = await this.c();
+    const res = await client.api.workspaces.$post({ json: { name } });
     if (!res.ok) {
       const body = await res.text().catch(() => "");
       throw new Error(`Failed to create workspace "${name}": ${res.status} ${body.slice(0, 160)}`);
@@ -118,201 +62,270 @@ export class ApiHelper {
     return (await res.json()) as { id: string; name: string; slug: string };
   }
 
-  async getChannels(): Promise<Channel[]> {
-    const res = await this.request(`/api/workspaces/${this.workspaceSlug}/channels`);
-    return (await res.json()) as Channel[];
+  async getChannels() {
+    const client = await this.c();
+    const res = await client.api.workspaces[":slug"].channels.$get({ param: { slug: this.slug } });
+    return (await res.json()) as { id: string; name: string; description: string | null }[];
   }
 
-  async getChannelByName(name: string): Promise<Channel> {
+  async getChannelByName(name: string) {
     const channels = await this.getChannels();
     const channel = channels.find((c) => c.name === name);
     if (!channel) throw new Error(`Channel "${name}" not found`);
     return channel;
   }
 
-  async joinChannel(channelId: string): Promise<void> {
-    const res = await this.request(
-      `/api/workspaces/${this.workspaceSlug}/channels/${channelId}/join`,
-      { method: "POST" },
-    );
-    if (!res.ok) {
-      throw new Error(`Failed to join channel: ${res.status}`);
-    }
-  }
-
-  async createChannel(name: string, description?: string): Promise<Channel> {
-    const res = await this.request(`/api/workspaces/${this.workspaceSlug}/channels`, {
-      method: "POST",
-      body: JSON.stringify({ name, description }),
+  async joinChannel(channelId: string) {
+    const client = await this.c();
+    const res = await client.api.workspaces[":slug"].channels[":id"].join.$post({
+      param: { slug: this.slug, id: channelId },
     });
-    return (await res.json()) as Channel;
+    if (!res.ok) throw new Error(`Failed to join channel: ${res.status}`);
   }
 
-  async createPrivateChannel(name: string, description?: string): Promise<Channel> {
-    const res = await this.request(`/api/workspaces/${this.workspaceSlug}/channels`, {
-      method: "POST",
-      body: JSON.stringify({ name, description, type: "private" }),
+  async createChannel(name: string, description?: string) {
+    const client = await this.c();
+    const res = await client.api.workspaces[":slug"].channels.$post({
+      param: { slug: this.slug },
+      json: { name, description },
     });
-    return (await res.json()) as Channel;
+    return (await res.json()) as { id: string; name: string; description: string | null };
   }
 
-  async addChannelMember(channelId: string, userId: string): Promise<void> {
-    const res = await this.request(
-      `/api/workspaces/${this.workspaceSlug}/channels/${channelId}/members`,
-      { method: "POST", body: JSON.stringify({ userId }) },
-    );
-    if (!res.ok) {
-      throw new Error(`Failed to add channel member: ${res.status}`);
-    }
+  async createPrivateChannel(name: string, description?: string) {
+    const client = await this.c();
+    const res = await client.api.workspaces[":slug"].channels.$post({
+      param: { slug: this.slug },
+      json: { name, description, type: "private" as const },
+    });
+    return (await res.json()) as { id: string; name: string; description: string | null };
   }
 
-  async removeChannelMember(channelId: string, userId: string): Promise<void> {
-    const res = await this.request(
-      `/api/workspaces/${this.workspaceSlug}/channels/${channelId}/members/${userId}`,
-      { method: "DELETE" },
-    );
-    if (!res.ok) {
-      throw new Error(`Failed to remove channel member: ${res.status}`);
-    }
+  async addChannelMember(channelId: string, userId: string) {
+    const client = await this.c();
+    const res = await client.api.workspaces[":slug"].channels[":id"].members.$post({
+      param: { slug: this.slug, id: channelId },
+      json: { userId },
+    });
+    if (!res.ok) throw new Error(`Failed to add channel member: ${res.status}`);
   }
 
-  async createMessage(channelId: string, content: string): Promise<Message> {
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const res = await this.request(
-        `/api/workspaces/${this.workspaceSlug}/channels/${channelId}/messages`,
-        { method: "POST", body: JSON.stringify({ content }) },
-      );
-      if (res.ok) return (await res.json()) as Message;
-      // Retry on server errors (load-related)
-      if (attempt < 2) await new Promise((r) => setTimeout(r, 200));
-    }
-    throw new Error(`Failed to create message after 3 attempts`);
+  async removeChannelMember(channelId: string, userId: string) {
+    const client = await this.c();
+    const res = await client.api.workspaces[":slug"].channels[":id"].members[":userId"].$delete({
+      param: { slug: this.slug, id: channelId, userId },
+    });
+    if (!res.ok) throw new Error(`Failed to remove channel member: ${res.status}`);
   }
 
-  async getMessages(
-    channelId: string,
-    limit = 50,
-  ): Promise<{ messages: Message[]; nextCursor: string | null }> {
-    const res = await this.request(
-      `/api/workspaces/${this.workspaceSlug}/channels/${channelId}/messages?limit=${limit}`,
-    );
-    return (await res.json()) as { messages: Message[]; nextCursor: string | null };
+  async createMessage(channelId: string, content: string) {
+    const client = await this.c();
+    const res = await client.api.workspaces[":slug"].channels[":id"].messages.$post({
+      param: { slug: this.slug, id: channelId },
+      json: { content },
+    });
+    if (!res.ok) throw new Error(`Failed to create message: ${res.status}`);
+    return (await res.json()) as { id: string; channelId: string; userId: string; content: string; createdAt: string; updatedAt: string };
   }
 
-  async createThreadReply(channelId: string, parentMessageId: string, content: string): Promise<Message> {
-    const res = await this.request(
-      `/api/workspaces/${this.workspaceSlug}/channels/${channelId}/messages/${parentMessageId}/replies`,
-      { method: "POST", body: JSON.stringify({ content }) },
-    );
-    return (await res.json()) as Message;
+  async getMessages(channelId: string, limit = 50) {
+    const client = await this.c();
+    const res = await client.api.workspaces[":slug"].channels[":id"].messages.$get({
+      param: { slug: this.slug, id: channelId },
+      query: { limit },
+    });
+    return (await res.json()) as { messages: { id: string; channelId: string; userId: string; content: string; createdAt: string; updatedAt: string }[]; nextCursor: string | null };
   }
 
-  async toggleReaction(messageId: string, emoji: string): Promise<{ reactions: { emoji: string; count: number; userIds: string[] }[] }> {
-    const res = await this.request(`/api/messages/${messageId}/reactions`, {
-      method: "POST",
-      body: JSON.stringify({ emoji }),
+  async createThreadReply(channelId: string, parentMessageId: string, content: string) {
+    const client = await this.c();
+    const res = await client.api.workspaces[":slug"].channels[":id"].messages[":messageId"].replies.$post({
+      param: { slug: this.slug, id: channelId, messageId: parentMessageId },
+      json: { content },
+    });
+    return (await res.json()) as { id: string; channelId: string; userId: string; content: string; createdAt: string; updatedAt: string };
+  }
+
+  async toggleReaction(messageId: string, emoji: string) {
+    const client = await this.c();
+    const res = await client.api.messages[":id"].reactions.$post({
+      param: { id: messageId },
+      json: { emoji },
     });
     return (await res.json()) as { reactions: { emoji: string; count: number; userIds: string[] }[] };
   }
 
-  async editMessage(messageId: string, content: string): Promise<Message> {
-    const res = await this.request(`/api/messages/${messageId}`, {
-      method: "PUT",
-      body: JSON.stringify({ content }),
+  async editMessage(messageId: string, content: string) {
+    const client = await this.c();
+    const res = await client.api.messages[":id"].$put({
+      param: { id: messageId },
+      json: { content },
     });
-    return (await res.json()) as Message;
+    return (await res.json()) as { id: string; channelId: string; userId: string; content: string; createdAt: string; updatedAt: string };
   }
 
-  async deleteMessage(messageId: string): Promise<{ ok: boolean }> {
-    const res = await this.request(`/api/messages/${messageId}`, {
-      method: "DELETE",
+  async deleteMessage(messageId: string) {
+    const client = await this.c();
+    const res = await client.api.messages[":id"].$delete({
+      param: { id: messageId },
     });
     return (await res.json()) as { ok: boolean };
   }
 
-  async getChannelMembers(channelId: string): Promise<{ id: string; displayName: string; email: string; avatarUrl: string | null; joinedAt: string }[]> {
-    const res = await this.request(`/api/workspaces/${this.workspaceSlug}/channels/${channelId}/members`);
+  async getChannelMembers(channelId: string) {
+    const client = await this.c();
+    const res = await client.api.workspaces[":slug"].channels[":id"].members.$get({
+      param: { slug: this.slug, id: channelId },
+    });
     return (await res.json()) as { id: string; displayName: string; email: string; avatarUrl: string | null; joinedAt: string }[];
   }
 
-  async getMembers(): Promise<{ id: string; displayName: string; email: string; avatarUrl: string | null }[]> {
-    const res = await this.request(`/api/workspaces/${this.workspaceSlug}/members`);
+  async getMembers() {
+    const client = await this.c();
+    const res = await client.api.workspaces[":slug"].members.$get({
+      param: { slug: this.slug },
+      query: {},
+    });
     return (await res.json()) as { id: string; displayName: string; email: string; avatarUrl: string | null }[];
   }
 
-  async createDm(userId: string): Promise<{ channel: Channel & { type: string }; otherUser: { id: string; displayName: string } }> {
-    const res = await this.request(`/api/workspaces/${this.workspaceSlug}/dm`, {
-      method: "POST",
-      body: JSON.stringify({ userId }),
+  async createDm(userId: string) {
+    const client = await this.c();
+    const res = await client.api.workspaces[":slug"].dm.$post({
+      param: { slug: this.slug },
+      json: { userId },
     });
-    return (await res.json()) as { channel: Channel & { type: string }; otherUser: { id: string; displayName: string } };
+    return (await res.json()) as { channel: { id: string; name: string; description: string | null; type: string }; otherUser: { id: string; displayName: string } };
   }
 
-  async getDms(): Promise<{ channel: Channel & { type: string }; otherUser: { id: string; displayName: string } }[]> {
-    const res = await this.request(`/api/workspaces/${this.workspaceSlug}/dm`);
-    return (await res.json()) as { channel: Channel & { type: string }; otherUser: { id: string; displayName: string } }[];
+  async getDms() {
+    const client = await this.c();
+    const res = await client.api.workspaces[":slug"].dm.$get({
+      param: { slug: this.slug },
+    });
+    return (await res.json()) as { channel: { id: string; name: string; description: string | null; type: string }; otherUser: { id: string; displayName: string } }[];
   }
 
-  async createInvite(): Promise<{ id: string; code: string }> {
-    const res = await this.request(`/api/workspaces/${this.workspaceSlug}/invites`, {
-      method: "POST",
-      body: JSON.stringify({}),
+  async createGroupDm(memberIds: string[]) {
+    const client = await this.c();
+    const res = await client.api.workspaces[":slug"]["group-dm"].$post({
+      param: { slug: this.slug },
+      json: { memberIds },
     });
-    if (!res.ok) {
-      throw new Error(`Failed to create invite: ${res.status}`);
-    }
+    if (!res.ok) throw new Error(`Failed to create group DM: ${res.status}`);
+    return (await res.json()) as { channel: { id: string; type: string; displayName: string | null }; members: { id: string; displayName: string }[] };
+  }
+
+  async createInvite() {
+    const client = await this.c();
+    const res = await client.api.workspaces[":slug"].invites.$post({
+      param: { slug: this.slug },
+      json: {},
+    });
+    if (!res.ok) throw new Error(`Failed to create invite: ${res.status}`);
     return (await res.json()) as { id: string; code: string };
   }
 
-  async acceptInvite(code: string): Promise<{ slug: string }> {
-    const res = await this.request(`/api/invites/${code}/accept`, {
-      method: "POST",
-      body: JSON.stringify({}),
+  async acceptInvite(code: string) {
+    const client = await this.c();
+    const res = await client.api.invites[":code"].accept.$post({
+      param: { code },
     });
-    if (!res.ok) {
-      throw new Error(`Failed to accept invite: ${res.status}`);
-    }
+    if (!res.ok) throw new Error(`Failed to accept invite: ${res.status}`);
     return (await res.json()) as { slug: string };
   }
 
-  async deleteWorkspace(): Promise<void> {
-    await this.request(`/api/workspaces/${this.workspaceSlug}`, { method: "DELETE" });
+  async deleteWorkspace() {
+    const client = await this.c();
+    await client.api.workspaces[":slug"].$delete({ param: { slug: this.slug } });
   }
 
-  async searchMessages(
-    q: string,
-    options?: { channelId?: string; userId?: string; limit?: number; offset?: number },
-  ): Promise<{ results: { messageId: string; headline: string; channelId: string }[]; total: number }> {
-    const params = new URLSearchParams({ q });
-    if (options?.channelId) params.set("channelId", options.channelId);
-    if (options?.userId) params.set("userId", options.userId);
-    if (options?.limit) params.set("limit", String(options.limit));
-    if (options?.offset) params.set("offset", String(options.offset));
-    const res = await this.request(
-      `/api/workspaces/${this.workspaceSlug}/search?${params.toString()}`,
-    );
+  async searchMessages(q: string, options?: { channelId?: string; userId?: string; limit?: number; offset?: number }) {
+    const client = await this.c();
+    const res = await client.api.workspaces[":slug"].search.$get({
+      param: { slug: this.slug },
+      query: {
+        q,
+        channelId: options?.channelId,
+        userId: options?.userId,
+        limit: options?.limit,
+        offset: options?.offset,
+      },
+    });
     return (await res.json()) as { results: { messageId: string; headline: string; channelId: string }[]; total: number };
   }
 
-  async getUnreadCounts(): Promise<Record<string, number>> {
-    const res = await this.request(`/api/workspaces/${this.workspaceSlug}/unread-counts`);
+  async archiveChannel(channelId: string) {
+    const client = await this.c();
+    const res = await client.api.workspaces[":slug"].channels[":id"].archive.$post({
+      param: { slug: this.slug, id: channelId },
+    });
+    if (!res.ok) throw new Error(`Failed to archive channel: ${res.status}`);
+    return (await res.json()) as { id: string; name: string; description: string | null };
+  }
+
+  async unarchiveChannel(channelId: string) {
+    const client = await this.c();
+    const res = await client.api.workspaces[":slug"].channels[":id"].unarchive.$post({
+      param: { slug: this.slug, id: channelId },
+    });
+    if (!res.ok) throw new Error(`Failed to unarchive channel: ${res.status}`);
+    return (await res.json()) as { id: string; name: string; description: string | null };
+  }
+
+  async updateChannelDescription(channelId: string, description: string | null) {
+    const client = await this.c();
+    const res = await client.api.workspaces[":slug"].channels[":id"].$patch({
+      param: { slug: this.slug, id: channelId },
+      json: { description },
+    });
+    return (await res.json()) as { id: string; name: string; description: string | null };
+  }
+
+  async getUnreadCounts() {
+    const client = await this.c();
+    const res = await client.api.workspaces[":slug"]["unread-counts"].$get({
+      param: { slug: this.slug },
+    });
     return (await res.json()) as Record<string, number>;
   }
 
-  async markChannelAsRead(channelId: string): Promise<{ ok: boolean }> {
-    const res = await this.request(
-      `/api/workspaces/${this.workspaceSlug}/channels/${channelId}/read`,
-      { method: "POST" },
-    );
+  async markChannelAsRead(channelId: string) {
+    const client = await this.c();
+    const res = await client.api.workspaces[":slug"].channels[":id"].read.$post({
+      param: { slug: this.slug, id: channelId },
+    });
     return (await res.json()) as { ok: boolean };
   }
 
-  async uploadFile(
-    name: string,
-    content: string | Buffer,
-    mimeType: string,
-  ): Promise<{ id: string; filename: string; mimeType: string; size: number }> {
-    const token = await this.tokenPromise;
+  async pinMessage(channelId: string, messageId: string) {
+    const client = await this.c();
+    const res = await client.api.workspaces[":slug"].channels[":id"].messages[":messageId"].pin.$post({
+      param: { slug: this.slug, id: channelId, messageId },
+    });
+    return (await res.json()) as { ok: boolean };
+  }
+
+  async unpinMessage(channelId: string, messageId: string) {
+    const client = await this.c();
+    const res = await client.api.workspaces[":slug"].channels[":id"].messages[":messageId"].pin.$delete({
+      param: { slug: this.slug, id: channelId, messageId },
+    });
+    return (await res.json()) as { ok: boolean };
+  }
+
+  async shareMessage(destinationChannelId: string, sharedMessageId: string, comment = "") {
+    const client = await this.c();
+    const res = await client.api.workspaces[":slug"].channels[":id"].messages.share.$post({
+      param: { slug: this.slug, id: destinationChannelId },
+      json: { sharedMessageId, comment },
+    });
+    if (!res.ok) throw new Error(`Failed to share message: ${res.status}`);
+    return (await res.json()) as { id: string; channelId: string; content: string };
+  }
+
+  async uploadFile(name: string, content: string | Buffer, mimeType: string) {
+    const { token } = await this.rpc;
     const blobContent = typeof content === "string" ? content : new Uint8Array(content);
     const blob = new Blob([blobContent], { type: mimeType });
     const file = new File([blob], name, { type: mimeType });
@@ -324,13 +337,8 @@ export class ApiHelper {
       headers: { Authorization: `Bearer ${token}` },
       body: form,
     });
-
-    if (!res.ok) {
-      throw new Error(`Upload failed: ${res.status}`);
-    }
-    const body = (await res.json()) as {
-      attachments: { id: string; filename: string; mimeType: string; size: number }[];
-    };
+    if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+    const body = (await res.json()) as { attachments: { id: string; filename: string; mimeType: string; size: number }[] };
     return body.attachments[0]!;
   }
 }

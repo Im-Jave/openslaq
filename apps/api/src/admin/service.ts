@@ -7,6 +7,7 @@ import { messages } from "../messages/schema";
 import { attachments } from "../uploads/schema";
 import { reactions } from "../reactions/schema";
 import { getStackServerApp } from "./stack-server";
+import { escapeLike } from "../lib/escape-like";
 
 export async function getStats() {
   const [userCount, workspaceCount, channelCount, messageCount, attachmentCount, reactionCount] =
@@ -70,8 +71,8 @@ export async function getUsers({
 
   const searchCondition = search
     ? or(
-        ilike(users.displayName, `%${search}%`),
-        ilike(users.email, `%${search}%`),
+        ilike(users.displayName, `%${escapeLike(search)}%`),
+        ilike(users.email, `%${escapeLike(search)}%`),
       )
     : undefined;
 

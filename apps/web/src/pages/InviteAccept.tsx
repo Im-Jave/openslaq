@@ -15,7 +15,7 @@ export function InviteAcceptPage() {
   const [loading, setLoading] = useState(true);
   const [accepting, setAccepting] = useState(false);
 
-  const { getInvite, acceptInvite } = useInvitesApi(user);
+  const { getInvite, acceptInvite } = useInvitesApi();
 
   useEffect(() => {
     if (!user || !code) return;

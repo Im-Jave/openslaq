@@ -8,26 +8,30 @@ import {
   setEnabled,
 } from "../../api/src/rate-limit/store";
 
-const BASE_URL = process.env.API_BASE_URL || "http://localhost:3001";
-const E2E_TEST_SECRET = process.env.E2E_TEST_SECRET || "openslack-e2e-test-secret-do-not-use-in-prod";
+function getBaseUrl() {
+  return process.env.API_BASE_URL || "http://localhost:3001";
+}
+function getTestSecret() {
+  return process.env.E2E_TEST_SECRET || "openslaq-e2e-test-secret-do-not-use-in-prod";
+}
 
 async function enableRateLimits() {
-  await fetch(`${BASE_URL}/api/test/reset-rate-limits`, {
+  await fetch(`${getBaseUrl()}/api/test/reset-rate-limits`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${E2E_TEST_SECRET}` },
+    headers: { Authorization: `Bearer ${getTestSecret()}` },
   });
 }
 
 async function disableRateLimits() {
-  await fetch(`${BASE_URL}/api/test/disable-rate-limits`, {
+  await fetch(`${getBaseUrl()}/api/test/disable-rate-limits`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${E2E_TEST_SECRET}` },
+    headers: { Authorization: `Bearer ${getTestSecret()}` },
   });
 }
 
 describe("rate limit test routes auth", () => {
   test("test endpoint without valid secret → 401", async () => {
-    const res = await fetch(`${BASE_URL}/api/test/reset-rate-limits`, {
+    const res = await fetch(`${getBaseUrl()}/api/test/reset-rate-limits`, {
       method: "POST",
       headers: { Authorization: "Bearer wrong-secret" },
     });
@@ -93,7 +97,7 @@ describe("rate limiting", () => {
 
   test("exceeding workspace-create limit returns 429 with correct headers", async () => {
     const id = testId();
-    const { client } = await createTestClient({ id: `rl-user-${id}`, email: `rl-${id}@openslack.dev` });
+    const { client } = await createTestClient({ id: `rl-user-${id}`, email: `rl-${id}@openslaq.dev` });
 
     // workspace-create limit is 3 per 60s
     for (let i = 0; i < 3; i++) {
@@ -121,8 +125,8 @@ describe("rate limiting", () => {
   test("different users have independent rate limits", async () => {
     const idA = testId();
     const idB = testId();
-    const { client: clientA } = await createTestClient({ id: `rl-a-${idA}`, email: `rl-a-${idA}@openslack.dev` });
-    const { client: clientB } = await createTestClient({ id: `rl-b-${idB}`, email: `rl-b-${idB}@openslack.dev` });
+    const { client: clientA } = await createTestClient({ id: `rl-a-${idA}`, email: `rl-a-${idA}@openslaq.dev` });
+    const { client: clientB } = await createTestClient({ id: `rl-b-${idB}`, email: `rl-b-${idB}@openslaq.dev` });
 
     // Exhaust user A's workspace-create limit
     for (let i = 0; i < 3; i++) {
@@ -147,7 +151,7 @@ describe("rate limiting", () => {
 
   test("different buckets are independent", async () => {
     const id = testId();
-    const { client } = await createTestClient({ id: `rl-bucket-${id}`, email: `rl-bucket-${id}@openslack.dev` });
+    const { client } = await createTestClient({ id: `rl-bucket-${id}`, email: `rl-bucket-${id}@openslaq.dev` });
 
     // Create a workspace first so we can create channels
     const wsRes = await client.api.workspaces.$post({
@@ -180,11 +184,11 @@ describe("rate limiting", () => {
   });
 
   test("IP-based rate limit on invite-accept returns 429", async () => {
-    const { headers } = await createTestClient({ id: `rl-ip-${testId()}`, email: `rl-ip-${testId()}@openslack.dev` });
+    const { headers } = await createTestClient({ id: `rl-ip-${testId()}`, email: `rl-ip-${testId()}@openslaq.dev` });
 
     // invite-accept limit is 5 per 60s per IP
     for (let i = 0; i < 5; i++) {
-      const res = await fetch(`${BASE_URL}/api/invites/nonexistent-code/accept`, {
+      const res = await fetch(`${getBaseUrl()}/api/invites/nonexistent-code/accept`, {
         method: "POST",
         headers,
       });
@@ -193,7 +197,7 @@ describe("rate limiting", () => {
     }
 
     // 6th request should be rate limited
-    const res = await fetch(`${BASE_URL}/api/invites/nonexistent-code/accept`, {
+    const res = await fetch(`${getBaseUrl()}/api/invites/nonexistent-code/accept`, {
       method: "POST",
       headers,
     });
@@ -205,7 +209,7 @@ describe("rate limiting", () => {
 
   test("Retry-After is a positive integer <= 60", async () => {
     const id = testId();
-    const { client } = await createTestClient({ id: `rl-retry-${id}`, email: `rl-retry-${id}@openslack.dev` });
+    const { client } = await createTestClient({ id: `rl-retry-${id}`, email: `rl-retry-${id}@openslaq.dev` });
 
     // Exhaust workspace-create limit
     for (let i = 0; i < 3; i++) {

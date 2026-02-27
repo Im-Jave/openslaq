@@ -12,8 +12,10 @@ import {
 } from "../ui";
 import { ProfileImageEditor } from "./ProfileImageEditor";
 import { NotificationSettings } from "./NotificationSettings";
+import { DesktopSettings } from "./DesktopSettings";
+import { isTauri } from "../../lib/tauri";
 
-type Tab = "profile" | "notifications";
+type Tab = "profile" | "notifications" | "desktop";
 
 interface UserSettingsDialogProps {
   open: boolean;
@@ -64,6 +66,7 @@ export function UserSettingsDialog({ open, onOpenChange }: UserSettingsDialogPro
   const tabs: { id: Tab; label: string }[] = [
     { id: "profile", label: "Profile" },
     { id: "notifications", label: "Notifications" },
+    ...(isTauri() ? [{ id: "desktop" as const, label: "Desktop" }] : []),
   ];
 
   return (
@@ -137,6 +140,10 @@ export function UserSettingsDialog({ open, onOpenChange }: UserSettingsDialogPro
 
             {activeTab === "notifications" && (
               <NotificationSettings />
+            )}
+
+            {activeTab === "desktop" && (
+              <DesktopSettings />
             )}
           </div>
         </div>

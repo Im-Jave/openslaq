@@ -1,0 +1,37 @@
+import React from "react";
+import { render, screen } from "@testing-library/react-native";
+import { HeadlineRenderer } from "../search/HeadlineRenderer";
+
+describe("HeadlineRenderer", () => {
+  it("renders plain text (no marks) as-is", () => {
+    render(<HeadlineRenderer headline="hello world" />);
+
+    const text = screen.getByTestId("headline-text");
+    expect(text).toBeTruthy();
+    expect(screen.queryAllByTestId("headline-mark")).toHaveLength(0);
+  });
+
+  it("renders <mark> content with highlight style", () => {
+    render(<HeadlineRenderer headline="hello <mark>world</mark>" />);
+
+    const marks = screen.getAllByTestId("headline-mark");
+    expect(marks).toHaveLength(1);
+    expect(marks[0].props.children).toBe("world");
+  });
+
+  it("renders multiple mark segments correctly", () => {
+    render(
+      <HeadlineRenderer headline="<mark>hello</mark> there <mark>world</mark>" />,
+    );
+
+    const marks = screen.getAllByTestId("headline-mark");
+    expect(marks).toHaveLength(2);
+    expect(marks[0].props.children).toBe("hello");
+    expect(marks[1].props.children).toBe("world");
+  });
+
+  it("renders empty string without crash", () => {
+    const { toJSON } = render(<HeadlineRenderer headline="" />);
+    expect(toJSON()).toBeTruthy();
+  });
+});

@@ -1,15 +1,17 @@
-import { Fragment, useCallback, useEffect, useRef } from "react";
+import { Fragment, useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { useParams } from "react-router-dom";
 import { useSocketEvent } from "../../hooks/useSocketEvent";
 import { MessageItem } from "./MessageItem";
 import { MessageInput } from "./MessageInput";
 import { DaySeparator } from "./DaySeparator";
 import { isDifferentDay } from "./message-date-utils";
-import type { Message, MessageId, ChannelId, ReactionGroup } from "@openslack/shared";
+import type { Message, MessageId, ChannelId, ReactionGroup } from "@openslaq/shared";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
 import { useThreadMessages } from "../../hooks/chat/useThreadMessages";
 import { useMessageMutations } from "../../hooks/chat/useMessageMutations";
 import { useLoadMoreReplies } from "../../hooks/chat/useLoadMoreReplies";
+import { useBotActions } from "../../hooks/chat/useBotActions";
+import { useTypingEmitter } from "../../hooks/chat/useTypingEmitter";
 import { useChatStore } from "../../state/chat-store";
 
 interface ThreadPanelProps {
@@ -25,10 +27,12 @@ export function ThreadPanel({ channelId, parentMessageId, onClose, onOpenProfile
   const { workspaceSlug } = useParams<{ workspaceSlug: string }>();
   const { state, dispatch } = useChatStore();
   const { toggleReaction, editMessage, deleteMessage } = useMessageMutations(user);
+  const { triggerAction } = useBotActions();
+  const { emitTyping } = useTypingEmitter(channelId);
 
-  useThreadMessages(user, workspaceSlug, channelId, parentMessageId);
+  useThreadMessages(workspaceSlug, channelId, parentMessageId);
 
-  const { loadMore, loadingNewer, hasNewer } = useLoadMoreReplies(channelId, parentMessageId);
+  const { loadOlder, loadingOlder, hasOlder } = useLoadMoreReplies(channelId, parentMessageId);
 
   const parentMessage = state.messagesById[parentMessageId] ?? null;
   const replies = (state.threadReplyIds[parentMessageId] ?? [])
@@ -39,26 +43,92 @@ export function ThreadPanel({ channelId, parentMessageId, onClose, onOpenProfile
   const error = state.ui.threadError[parentMessageId];
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const bottomSentinelRef = useRef<HTMLDivElement>(null);
+  const topSentinelRef = useRef<HTMLDivElement>(null);
 
-  // Bottom IntersectionObserver — load more replies
+  // Track scroll height before prepend for scroll anchoring
+  const prevScrollHeightRef = useRef<number>(0);
+  const prevScrollTopRef = useRef<number>(0);
+  const isPrependingRef = useRef(false);
+  const prevReplyCountRef = useRef<number>(0);
+  const isNearBottomRef = useRef(true);
+  const didInitialScrollRef = useRef(false);
+  const prevParentIdRef = useRef<string>(parentMessageId);
+
+  // Reset scroll state on thread switch
   useEffect(() => {
-    const sentinel = bottomSentinelRef.current;
+    if (parentMessageId !== prevParentIdRef.current) {
+      prevParentIdRef.current = parentMessageId;
+      didInitialScrollRef.current = false;
+      prevReplyCountRef.current = 0;
+      isNearBottomRef.current = true;
+    }
+  }, [parentMessageId]);
+
+  // Track whether user is near the bottom of the scroll container
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const onScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      isNearBottomRef.current = scrollHeight - scrollTop - clientHeight < 150;
+    };
+    container.addEventListener("scroll", onScroll, { passive: true });
+    return () => container.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // Mark when a prepend starts
+  useEffect(() => {
+    if (loadingOlder) {
+      const container = scrollContainerRef.current;
+      if (container) {
+        prevScrollHeightRef.current = container.scrollHeight;
+        prevScrollTopRef.current = container.scrollTop;
+        isPrependingRef.current = true;
+      }
+    }
+  }, [loadingOlder]);
+
+  // Scroll anchoring: prepend preservation, initial scroll-to-bottom, auto-scroll on new messages
+  useLayoutEffect(() => {
+    const container = scrollContainerRef.current;
+    const prevCount = prevReplyCountRef.current;
+    prevReplyCountRef.current = replies.length;
+    if (!container || replies.length <= prevCount) return;
+
+    if (isPrependingRef.current) {
+      const heightDelta = container.scrollHeight - prevScrollHeightRef.current;
+      container.scrollTop = prevScrollTopRef.current + heightDelta;
+      isPrependingRef.current = false;
+      return;
+    }
+    if (!didInitialScrollRef.current) {
+      container.scrollTop = container.scrollHeight;
+      didInitialScrollRef.current = true;
+      return;
+    }
+    if (isNearBottomRef.current) {
+      container.scrollTop = container.scrollHeight;
+    }
+  }, [replies.length]);
+
+  // Top IntersectionObserver — load older replies
+  useEffect(() => {
+    const sentinel = topSentinelRef.current;
     const container = scrollContainerRef.current;
     if (!sentinel || !container) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0]?.isIntersecting && hasNewer && !loadingNewer) {
-          void loadMore();
+        if (entries[0]?.isIntersecting && hasOlder && !loadingOlder) {
+          void loadOlder();
         }
       },
-      { root: container, rootMargin: "0px 0px 200px 0px" },
+      { root: container, rootMargin: "200px 0px 0px 0px" },
     );
 
     observer.observe(sentinel);
     return () => observer.disconnect();
-  }, [hasNewer, loadingNewer, loadMore]);
+  }, [hasOlder, loadingOlder, loadOlder]);
 
   const handleNewMessage = useCallback(
     (message: Message) => {
@@ -148,7 +218,15 @@ export function ThreadPanel({ channelId, parentMessageId, onClose, onOpenProfile
                   onOpenProfile={onOpenProfile}
                   onEditMessage={editMessage}
                   onDeleteMessage={deleteMessage}
+                  onBotAction={triggerAction}
                 />
+              </div>
+            )}
+
+            <div ref={topSentinelRef} className="h-px" />
+            {loadingOlder && (
+              <div data-testid="loading-more-replies" className="text-center text-faint text-xs py-2">
+                Loading more replies...
               </div>
             )}
 
@@ -174,22 +252,17 @@ export function ThreadPanel({ channelId, parentMessageId, onClose, onOpenProfile
                       onOpenProfile={onOpenProfile}
                       onEditMessage={editMessage}
                       onDeleteMessage={deleteMessage}
+                      onBotAction={triggerAction}
                     />
                   </Fragment>
                 );
               })
             )}
-            {loadingNewer && (
-              <div data-testid="loading-more-replies" className="text-center text-faint text-xs py-2">
-                Loading more replies...
-              </div>
-            )}
-            <div ref={bottomSentinelRef} className="h-px" />
           </>
         )}
       </div>
 
-      <MessageInput channelId={channelId} parentMessageId={parentMessageId} />
+      <MessageInput channelId={channelId} parentMessageId={parentMessageId} onTyping={emitTyping} />
     </div>
   );
 }

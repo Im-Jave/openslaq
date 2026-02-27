@@ -1,46 +1,51 @@
 import { useCallback } from "react";
+import { handlePresenceSync, handlePresenceUpdate, handleUserStatusUpdated } from "@openslaq/client-core";
 import { useSocketEvent } from "../useSocketEvent";
 import { useChatStore } from "../../state/chat-store";
 
 export function usePresenceTracking() {
   const { dispatch } = useChatStore();
 
-  const handleSync = useCallback(
+  const onSync = useCallback(
     (payload: {
       users: Array<{
         userId: string;
         status: "online" | "offline";
         lastSeenAt: string | null;
+        statusEmoji?: string | null;
+        statusText?: string | null;
+        statusExpiresAt?: string | null;
       }>;
     }) => {
-      dispatch({
-        type: "presence/sync",
-        users: payload.users.map((u) => ({
-          userId: u.userId,
-          online: u.status === "online",
-          lastSeenAt: u.lastSeenAt,
-        })),
-      });
+      dispatch(handlePresenceSync(payload));
     },
     [dispatch],
   );
 
-  const handleUpdated = useCallback(
+  const onUpdated = useCallback(
     (payload: {
       userId: string;
       status: "online" | "offline";
       lastSeenAt: string | null;
     }) => {
-      dispatch({
-        type: "presence/updated",
-        userId: payload.userId,
-        online: payload.status === "online",
-        lastSeenAt: payload.lastSeenAt,
-      });
+      dispatch(handlePresenceUpdate(payload));
     },
     [dispatch],
   );
 
-  useSocketEvent("presence:sync", handleSync);
-  useSocketEvent("presence:updated", handleUpdated);
+  const onStatusUpdated = useCallback(
+    (payload: {
+      userId: string;
+      statusEmoji: string | null;
+      statusText: string | null;
+      statusExpiresAt: string | null;
+    }) => {
+      dispatch(handleUserStatusUpdated(payload));
+    },
+    [dispatch],
+  );
+
+  useSocketEvent("presence:sync", onSync);
+  useSocketEvent("presence:updated", onUpdated);
+  useSocketEvent("user:statusUpdated", onStatusUpdated);
 }

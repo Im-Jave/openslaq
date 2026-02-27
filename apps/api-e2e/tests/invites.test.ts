@@ -68,7 +68,7 @@ describe("invites", () => {
 
   test("accept invite → second user joins workspace", async () => {
     const uid = testId();
-    const { client: client1 } = await createTestClient({ id: `inv-owner-${uid}`, email: `inv-owner-${uid}@openslack.dev` });
+    const { client: client1 } = await createTestClient({ id: `inv-owner-${uid}`, email: `inv-owner-${uid}@openslaq.dev` });
     const ws = await createTestWorkspace(client1);
 
     const createRes = await client1.api.workspaces[":slug"].invites.$post({
@@ -77,7 +77,7 @@ describe("invites", () => {
     });
     const invite = (await createRes.json()) as { code: string };
 
-    const { client: client2 } = await createTestClient({ id: `inv-joiner-${uid}`, email: `inv-joiner-${uid}@openslack.dev` });
+    const { client: client2 } = await createTestClient({ id: `inv-joiner-${uid}`, email: `inv-joiner-${uid}@openslaq.dev` });
     const acceptRes = await client2.api.invites[":code"].accept.$post({
       param: { code: invite.code },
     });
@@ -88,6 +88,7 @@ describe("invites", () => {
     // Verify user is a member
     const membersRes = await client2.api.workspaces[":slug"].members.$get({
       param: { slug: ws.slug },
+      query: {},
     });
     expect(membersRes.status).toBe(200);
     const members = (await membersRes.json()) as { id: string }[];
@@ -97,7 +98,7 @@ describe("invites", () => {
 
   test("accept invite auto-joins user to #general", async () => {
     const uid = testId();
-    const { client: client1 } = await createTestClient({ id: `inv-gen-owner-${uid}`, email: `inv-gen-owner-${uid}@openslack.dev` });
+    const { client: client1 } = await createTestClient({ id: `inv-gen-owner-${uid}`, email: `inv-gen-owner-${uid}@openslaq.dev` });
     const ws = await createTestWorkspace(client1);
 
     const createRes = await client1.api.workspaces[":slug"].invites.$post({
@@ -106,7 +107,7 @@ describe("invites", () => {
     });
     const invite = (await createRes.json()) as { code: string };
 
-    const { client: client2 } = await createTestClient({ id: `inv-gen-join-${uid}`, email: `inv-gen-join-${uid}@openslack.dev` });
+    const { client: client2 } = await createTestClient({ id: `inv-gen-join-${uid}`, email: `inv-gen-join-${uid}@openslaq.dev` });
     const acceptRes = await client2.api.invites[":code"].accept.$post({
       param: { code: invite.code },
     });
@@ -129,7 +130,7 @@ describe("invites", () => {
 
   test("accept twice → idempotent, useCount only increments once", async () => {
     const uid = testId();
-    const { client: client1 } = await createTestClient({ id: `inv-idem-owner-${uid}`, email: `inv-idem-owner-${uid}@openslack.dev` });
+    const { client: client1 } = await createTestClient({ id: `inv-idem-owner-${uid}`, email: `inv-idem-owner-${uid}@openslaq.dev` });
     const ws = await createTestWorkspace(client1);
 
     // Create invite with maxUses: 2
@@ -140,7 +141,7 @@ describe("invites", () => {
     const invite = (await createRes.json()) as { code: string };
 
     // First user accepts twice
-    const { client: client2 } = await createTestClient({ id: `inv-idem-join-${uid}`, email: `inv-idem-join-${uid}@openslack.dev` });
+    const { client: client2 } = await createTestClient({ id: `inv-idem-join-${uid}`, email: `inv-idem-join-${uid}@openslaq.dev` });
     const res1 = await client2.api.invites[":code"].accept.$post({
       param: { code: invite.code },
     });
@@ -152,7 +153,7 @@ describe("invites", () => {
     expect(res2.status).toBe(200);
 
     // Second user should still be able to accept (useCount should be 1, not 2)
-    const { client: client3 } = await createTestClient({ id: `inv-idem-join2-${uid}`, email: `inv-idem-join2-${uid}@openslack.dev` });
+    const { client: client3 } = await createTestClient({ id: `inv-idem-join2-${uid}`, email: `inv-idem-join2-${uid}@openslaq.dev` });
     const res3 = await client3.api.invites[":code"].accept.$post({
       param: { code: invite.code },
     });
@@ -161,7 +162,7 @@ describe("invites", () => {
 
   test("maxUses enforced → 410 after limit reached", async () => {
     const uid = testId();
-    const { client: client1 } = await createTestClient({ id: `inv-max-owner-${uid}`, email: `inv-max-owner-${uid}@openslack.dev` });
+    const { client: client1 } = await createTestClient({ id: `inv-max-owner-${uid}`, email: `inv-max-owner-${uid}@openslaq.dev` });
     const ws = await createTestWorkspace(client1);
 
     // Create invite with maxUses: 1
@@ -172,23 +173,49 @@ describe("invites", () => {
     const invite = (await createRes.json()) as { code: string };
 
     // First user accepts
-    const { client: client2 } = await createTestClient({ id: `inv-max-joinA-${uid}`, email: `inv-max-joinA-${uid}@openslack.dev` });
+    const { client: client2 } = await createTestClient({ id: `inv-max-joinA-${uid}`, email: `inv-max-joinA-${uid}@openslaq.dev` });
     const res1 = await client2.api.invites[":code"].accept.$post({
       param: { code: invite.code },
     });
     expect(res1.status).toBe(200);
 
     // Second user should be rejected
-    const { client: client3 } = await createTestClient({ id: `inv-max-joinB-${uid}`, email: `inv-max-joinB-${uid}@openslack.dev` });
+    const { client: client3 } = await createTestClient({ id: `inv-max-joinB-${uid}`, email: `inv-max-joinB-${uid}@openslaq.dev` });
     const res2 = await client3.api.invites[":code"].accept.$post({
       param: { code: invite.code },
     });
     expect(res2.status).toBe(410);
   });
 
+  test("concurrent acceptance with maxUses=1 → exactly one succeeds", async () => {
+    const uid = testId();
+    const { client: ownerClient } = await createTestClient({ id: `inv-conc-owner-${uid}`, email: `inv-conc-owner-${uid}@openslaq.dev` });
+    const ws = await createTestWorkspace(ownerClient);
+
+    // Create invite with maxUses: 1
+    const createRes = await ownerClient.api.workspaces[":slug"].invites.$post({
+      param: { slug: ws.slug },
+      json: { maxUses: 1 },
+    });
+    const invite = (await createRes.json()) as { code: string };
+
+    // Two different users accept concurrently
+    const { client: clientX } = await createTestClient({ id: `inv-conc-x-${uid}`, email: `inv-conc-x-${uid}@openslaq.dev` });
+    const { client: clientY } = await createTestClient({ id: `inv-conc-y-${uid}`, email: `inv-conc-y-${uid}@openslaq.dev` });
+
+    const [resX, resY] = await Promise.all([
+      clientX.api.invites[":code"].accept.$post({ param: { code: invite.code } }),
+      clientY.api.invites[":code"].accept.$post({ param: { code: invite.code } }),
+    ]);
+
+    const statuses = [resX.status, resY.status].sort();
+    // Exactly one should succeed (200) and one should fail (410)
+    expect(statuses).toEqual([200, 410]);
+  });
+
   test("revoke invite → 410 on accept", async () => {
     const uid = testId();
-    const { client: client1 } = await createTestClient({ id: `inv-rev-owner-${uid}`, email: `inv-rev-owner-${uid}@openslack.dev` });
+    const { client: client1 } = await createTestClient({ id: `inv-rev-owner-${uid}`, email: `inv-rev-owner-${uid}@openslaq.dev` });
     const ws = await createTestWorkspace(client1);
 
     const createRes = await client1.api.workspaces[":slug"].invites.$post({
@@ -204,7 +231,7 @@ describe("invites", () => {
     expect(revokeRes.status).toBe(200);
 
     // Try to accept
-    const { client: client2 } = await createTestClient({ id: `inv-rev-join-${uid}`, email: `inv-rev-join-${uid}@openslack.dev` });
+    const { client: client2 } = await createTestClient({ id: `inv-rev-join-${uid}`, email: `inv-rev-join-${uid}@openslaq.dev` });
     const acceptRes = await client2.api.invites[":code"].accept.$post({
       param: { code: invite.code },
     });

@@ -13,11 +13,16 @@ import uploadDownloadRoutes from "./uploads/download-routes";
 import uploadRoutes from "./uploads/routes";
 import reactionRoutes from "./reactions/routes";
 import adminRoutes from "./admin/routes";
+import huddleRoutes from "./huddle/routes";
 import rateLimitTestRoutes from "./rate-limit/test-routes";
+import botApiRoutes from "./bots/bot-api-routes";
+import interactionRoutes from "./bots/interaction-routes";
+import authRoutes from "./auth/routes";
 
 const app = new OpenAPIHono();
 
 app.get("/health", (c) => c.json({ status: "ok" }));
+app.post("/health", (c) => c.json({ status: "ok" }));
 
 app.use("/api/*", artificialDelay);
 
@@ -32,7 +37,7 @@ app.openAPIRegistry.registerComponent("securitySchemes", "Bearer", {
 app.doc31("/api/openapi.json", {
   openapi: "3.1.0",
   info: {
-    title: "OpenSlack API",
+    title: "OpenSlaq API",
     version: "1.0.0",
     description: "Real-time messaging platform API",
   },
@@ -47,6 +52,7 @@ app.doc31("/api/openapi.json", {
     { name: "Invites", description: "Workspace invitations" },
     { name: "Search", description: "Full-text message search" },
     { name: "Presence", description: "User online presence" },
+    { name: "Bots", description: "Bot app management and API" },
   ],
 });
 
@@ -56,7 +62,10 @@ app.get("/api/docs", apiReference({ url: "/api/openapi.json", theme: "kepler" })
 const routes = app
   .use(
     cors({
-      origin: env.CORS_ORIGIN,
+      origin: (origin) => {
+        if (!origin) return origin;
+        return env.CORS_ORIGIN.includes(origin) ? origin : null;
+      },
       credentials: true,
     }),
   )
@@ -69,7 +78,11 @@ const routes = app
   .route("/api", uploadRoutes)
   .route("/api", reactionRoutes)
   .route("/api/users", userRoutes)
-  .route("/api/admin", adminRoutes);
+  .route("/api/admin", adminRoutes)
+  .route("/api", huddleRoutes)
+  .route("/api/bot", botApiRoutes)
+  .route("/api/bot-interactions", interactionRoutes)
+  .route("/api/auth", authRoutes);
 
 // Export the app type for Hono RPC client (end-to-end type safety)
 export type AppType = typeof routes;

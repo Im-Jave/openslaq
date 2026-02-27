@@ -1,7 +1,10 @@
 import { useState, useRef, useEffect } from "react";
-import type { Message } from "@openslack/shared";
+import type { Message } from "@openslaq/shared";
 import { MessageContent } from "./MessageContent";
 import { MessageAttachments } from "./MessageAttachments";
+import { MessageActions } from "./MessageActions";
+import { LinkPreviewCard } from "./LinkPreviewCard";
+import { SharedMessageBlock } from "./SharedMessageBlock";
 import { ReactionBar } from "./ReactionBar";
 import { MessageActionBar } from "./MessageActionBar";
 import { Avatar, Button } from "../ui";
@@ -9,21 +12,33 @@ import { Avatar, Button } from "../ui";
 interface MessageItemProps {
   message: Message;
   currentUserId?: string;
+  senderStatusEmoji?: string | null;
   onOpenThread?: (messageId: string) => void;
   onToggleReaction?: (messageId: string, emoji: string) => void;
   onOpenProfile?: (userId: string) => void;
   onEditMessage?: (messageId: string, content: string) => void;
   onDeleteMessage?: (messageId: string) => void;
+  onMarkAsUnread?: (messageId: string) => void;
+  onPinMessage?: (messageId: string) => void;
+  onUnpinMessage?: (messageId: string) => void;
+  onShareMessage?: (messageId: string) => void;
+  onBotAction?: (messageId: string, actionId: string) => void;
 }
 
 export function MessageItem({
   message,
   currentUserId,
+  senderStatusEmoji,
   onOpenThread,
   onToggleReaction,
   onOpenProfile,
   onEditMessage,
   onDeleteMessage,
+  onMarkAsUnread,
+  onPinMessage,
+  onUnpinMessage,
+  onShareMessage,
+  onBotAction,
 }: MessageItemProps) {
   const isTopLevel = !message.parentMessageId;
   const displayName = message.senderDisplayName ?? message.userId;
@@ -75,11 +90,16 @@ export function MessageItem({
               setIsEditing(true);
             } : undefined}
             onDeleteMessage={onDeleteMessage ? () => onDeleteMessage(message.id) : undefined}
+            onMarkAsUnread={onMarkAsUnread ? () => onMarkAsUnread(message.id) : undefined}
+            onPinMessage={onPinMessage ? () => onPinMessage(message.id) : undefined}
+            onUnpinMessage={onUnpinMessage ? () => onUnpinMessage(message.id) : undefined}
+            onShareMessage={onShareMessage ? () => onShareMessage(message.id) : undefined}
+            isPinned={message.isPinned}
           />
         </div>
       )}
       <div className="flex gap-2.5 items-start">
-        {onOpenProfile ? (
+        {onOpenProfile && !message.isBot ? (
           <button
             type="button"
             data-testid={`message-avatar-${message.id}`}
@@ -104,7 +124,7 @@ export function MessageItem({
         )}
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">
-            {onOpenProfile ? (
+            {onOpenProfile && !message.isBot ? (
               <button
                 type="button"
                 onClick={() => onOpenProfile(message.userId)}
@@ -117,9 +137,24 @@ export function MessageItem({
                 {displayName}
               </span>
             )}
+            {senderStatusEmoji && (
+              <span className="text-xs" data-testid={`msg-status-emoji-${message.id}`}>{senderStatusEmoji}</span>
+            )}
+            {message.isBot && (
+              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300" data-testid="bot-badge">
+                APP
+              </span>
+            )}
             <span className="text-[11px] text-faint">
               {new Date(message.createdAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
             </span>
+            {message.isPinned && (
+              <span className="inline-flex items-center text-faint" data-testid="pin-badge" title="Pinned">
+                <svg className="w-3 h-3" viewBox="0 0 16 16" fill="currentColor">
+                  <path d="M4.456.734a1.75 1.75 0 0 1 2.826.504l.613 1.327a3.08 3.08 0 0 0 2.084 1.707l2.454.584c1.332.317 1.8 1.972.832 2.94L11.06 10l3.72 3.72a.75.75 0 1 1-1.06 1.06L10 11.06l-2.204 2.205c-.968.968-2.623.5-2.94-.832l-.584-2.454a3.08 3.08 0 0 0-1.707-2.084l-1.327-.613a1.75 1.75 0 0 1-.504-2.826L4.456.734Z" />
+                </svg>
+              </span>
+            )}
           </div>
           {isEditing ? (
             <div className="mt-1">
@@ -129,7 +164,7 @@ export function MessageItem({
                 value={editContent}
                 onChange={(e) => setEditContent(e.target.value)}
                 onKeyDown={handleEditKeyDown}
-                className="w-full bg-surface border border-border-default rounded-md px-3 py-2 text-sm text-primary resize-none focus:outline-none focus:border-slack-blue"
+                className="w-full bg-surface border border-border-default rounded-md px-3 py-2 text-sm text-primary resize-none focus:outline-none focus:border-slaq-blue"
                 rows={2}
               />
               <div className="flex gap-2 mt-1 text-xs text-faint">
@@ -140,9 +175,18 @@ export function MessageItem({
             </div>
           ) : (
             <>
-              {message.content && <MessageContent content={message.content} />}
+              {message.sharedMessage && (
+                <SharedMessageBlock sharedMessage={message.sharedMessage} />
+              )}
+              {message.content && <MessageContent content={message.content} mentions={message.mentions} onOpenProfile={onOpenProfile} />}
               {message.attachments?.length > 0 && (
                 <MessageAttachments attachments={message.attachments} />
+              )}
+              {message.linkPreviews?.map((p) => (
+                <LinkPreviewCard key={p.url} preview={p} />
+              ))}
+              {onBotAction && message.actions && message.actions.length > 0 && (
+                <MessageActions actions={message.actions} messageId={message.id} onAction={onBotAction} />
               )}
             </>
           )}
@@ -160,7 +204,7 @@ export function MessageItem({
                 size="sm"
                 data-testid={`thread-replies-${message.id}`}
                 onClick={() => onOpenThread(message.id)}
-                className="text-slack-blue p-0 font-semibold"
+                className="text-slaq-blue p-0 font-semibold"
               >
                 {message.replyCount} {message.replyCount === 1 ? "reply" : "replies"}
               </Button>

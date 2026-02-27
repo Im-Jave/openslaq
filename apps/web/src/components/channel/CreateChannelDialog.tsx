@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { asChannelId, asUserId } from "@openslack/shared";
-import type { Channel, ChannelType } from "@openslack/shared";
+import { asChannelId, asUserId } from "@openslaq/shared";
+import type { Channel, ChannelType } from "@openslaq/shared";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
 import { api } from "../../api";
 import { authorizedRequest } from "../../lib/api-client";
@@ -51,6 +51,8 @@ export function CreateChannelDialog({
           name: name.trim().toLowerCase().replace(/\s+/g, "-"),
           type: type as ChannelType,
           description: null,
+          displayName: null,
+          isArchived: false,
           createdBy: asUserId(user.id),
           createdAt: new Date().toISOString(),
         };

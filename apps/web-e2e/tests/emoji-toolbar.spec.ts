@@ -1,5 +1,5 @@
 import { expect } from "@playwright/test";
-import { test } from "./helpers/test-workspace";
+import { sharedTest as test } from "./helpers/test-workspace";
 import { openWorkspaceChannel } from "./helpers/chat-ui";
 
 test.describe("Emoji Toolbar Picker", () => {

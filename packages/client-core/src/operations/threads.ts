@@ -1,0 +1,106 @@
+import { AuthError, getErrorMessage } from "../api/errors";
+import { authorizedRequest } from "../api/api-client";
+import { normalizeCursor, normalizeMessage } from "./normalize";
+import type { OperationDeps } from "./types";
+
+interface LoadThreadMessagesParams {
+  workspaceSlug: string;
+  channelId: string;
+  parentMessageId: string;
+}
+
+export async function loadThreadMessages(
+  deps: OperationDeps,
+  params: LoadThreadMessagesParams,
+): Promise<void> {
+  const { api, auth, dispatch } = deps;
+  const { workspaceSlug: slug, channelId, parentMessageId } = params;
+
+  dispatch({ type: "thread/loadStart", parentMessageId });
+
+  try {
+    const [parentRes, repliesRes] = await Promise.all([
+      authorizedRequest(auth, (headers) =>
+        api.api.messages[":id"].$get({ param: { id: parentMessageId } }, { headers }),
+      ),
+      authorizedRequest(auth, (headers) =>
+        api.api.workspaces[":slug"].channels[":id"].messages[":messageId"].replies.$get(
+          { param: { slug, id: channelId, messageId: parentMessageId }, query: {} },
+          { headers },
+        ),
+      ),
+    ]);
+
+    const parentData = await parentRes.json();
+    const repliesData = await repliesRes.json();
+
+    if (!("id" in parentData)) {
+      dispatch({ type: "thread/loadError", parentMessageId, error: "Thread not found" });
+      return;
+    }
+
+    // API returns newest-first (direction=older default) — reverse to chronological for display
+    const replies = repliesData.messages.map(normalizeMessage).reverse();
+
+    dispatch({
+      type: "thread/setData",
+      parent: normalizeMessage(parentData),
+      replies,
+      olderCursor: normalizeCursor(repliesData.nextCursor),
+      hasOlder: normalizeCursor(repliesData.nextCursor) !== null,
+    });
+  } catch (err) {
+    if (err instanceof AuthError) {
+      auth.onAuthRequired();
+      return;
+    }
+    dispatch({
+      type: "thread/loadError",
+      parentMessageId,
+      error: getErrorMessage(err, "Failed to load thread"),
+    });
+  }
+}
+
+interface LoadOlderRepliesParams {
+  workspaceSlug: string;
+  channelId: string;
+  parentMessageId: string;
+  cursor: string;
+}
+
+export async function loadOlderReplies(
+  deps: OperationDeps,
+  params: LoadOlderRepliesParams,
+): Promise<void> {
+  const { api, auth, dispatch } = deps;
+  const { workspaceSlug: slug, channelId, parentMessageId, cursor } = params;
+
+  dispatch({ type: "thread/setLoadingOlder", parentMessageId, loading: true });
+
+  try {
+    const response = await authorizedRequest(auth, (headers) =>
+      api.api.workspaces[":slug"].channels[":id"].messages[":messageId"].replies.$get(
+        {
+          param: { slug, id: channelId, messageId: parentMessageId },
+          query: { cursor, direction: "older" },
+        },
+        { headers },
+      ),
+    );
+    const data = await response.json();
+    // API returns newest-first (desc) — reverse to chronological for prepend
+    dispatch({
+      type: "thread/prependReplies",
+      parentMessageId,
+      replies: data.messages.map(normalizeMessage).reverse(),
+      olderCursor: normalizeCursor(data.nextCursor),
+      hasOlder: normalizeCursor(data.nextCursor) !== null,
+    });
+  } catch {
+    dispatch({ type: "thread/setLoadingOlder", parentMessageId, loading: false });
+  }
+}
+
+// Keep loadMoreReplies as an alias for backwards compatibility during transition
+export const loadMoreReplies = loadOlderReplies;

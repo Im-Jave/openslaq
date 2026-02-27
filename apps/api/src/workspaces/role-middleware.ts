@@ -3,7 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../db";
 import { workspaceMembers } from "./schema";
 import { hasMinimumRole } from "../auth/permissions";
-import type { Role } from "@openslack/shared";
+import type { Role } from "@openslaq/shared";
 import type { WorkspaceEnv } from "./types";
 
 export type WorkspaceMemberEnv = WorkspaceEnv & {
@@ -31,7 +31,12 @@ export const resolveMemberRole = createMiddleware<WorkspaceMemberEnv>(async (c, 
     return c.json({ error: "Not a workspace member" }, 403);
   }
 
-  c.set("memberRole", row[0]!.role as Role);
+  const [memberRow] = row;
+  if (!memberRow) {
+    return c.json({ error: "Not a workspace member" }, 403);
+  }
+
+  c.set("memberRole", memberRow.role);
   await next();
 });
 

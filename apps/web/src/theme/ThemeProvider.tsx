@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { getWebCssVariables } from "@openslaq/shared";
 
 export type ThemeMode = "light" | "dark";
 
@@ -10,12 +11,16 @@ interface ThemeContextValue {
   cycle: () => void;
 }
 
-const STORAGE_KEY = "openslack-theme";
+const STORAGE_KEY = "openslaq-theme";
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 function applyClass(mode: ThemeMode) {
   document.documentElement.classList.toggle("dark", mode === "dark");
+  const variables = getWebCssVariables(mode);
+  for (const [name, value] of Object.entries(variables)) {
+    document.documentElement.style.setProperty(name, value);
+  }
 }
 
 function readStoredMode(): ThemeMode {

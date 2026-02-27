@@ -19,16 +19,16 @@ async function openWorkspaceListWithRetry(page: Page) {
       continue;
     }
 
-    // Page shows either "Your Workspaces" (has workspaces) or "Welcome to OpenSlack" (empty)
+    // Page shows either "Your Workspaces" (has workspaces) or "Welcome to OpenSlaq" (empty)
     const hasWorkspaces = await page.getByText("Your Workspaces").isVisible().catch(() => false);
-    const isEmpty = await page.getByText("Welcome to OpenSlack").isVisible().catch(() => false);
+    const isEmpty = await page.getByText("Welcome to OpenSlaq").isVisible().catch(() => false);
     if (hasWorkspaces || isEmpty) {
       return;
     }
   }
   // Final fallback: either heading should be visible
   await expect(
-    page.getByText("Your Workspaces").or(page.getByText("Welcome to OpenSlack")),
+    page.getByText("Your Workspaces").or(page.getByText("Welcome to OpenSlaq")),
   ).toBeVisible();
 }
 
@@ -45,7 +45,7 @@ test.describe("Authentication", () => {
           contentType: "application/json",
           body: JSON.stringify({
             id: "924565c5-6377-44b7-aa75-6b7de8d311f4",
-            display_name: "OpenSlack",
+            display_name: "OpenSlaq",
             config: {
               sign_up_enabled: true,
               credential_enabled: true,
@@ -77,9 +77,9 @@ test.describe("Authentication", () => {
   test("user display name appears in workspace list", async ({ page }) => {
     await setupMockAuth(page, { displayName: "E2E Auth User" });
     await openWorkspaceListWithRetry(page);
-    // Page shows either "Your Workspaces" (has workspaces) or "Welcome to OpenSlack" (empty)
+    // Page shows either "Your Workspaces" (has workspaces) or "Welcome to OpenSlaq" (empty)
     await expect(
-      page.getByText("Your Workspaces").or(page.getByText("Welcome to OpenSlack")),
+      page.getByText("Your Workspaces").or(page.getByText("Welcome to OpenSlaq")),
     ).toBeVisible();
   });
 });

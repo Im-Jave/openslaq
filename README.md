@@ -1,14 +1,14 @@
-# OpenSlack
+# OpenSlaq
 
-**Open-source Slack**
+**Open-source Slaq**
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Built with Bun](https://img.shields.io/badge/built%20with-Bun-f9f1e1.svg)](https://bun.sh)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6.svg)](https://www.typescriptlang.org/)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/BilalG1/openslack/pulls)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/BilalG1/openslaq/pulls)
 
 <p align="center">
-  <img src="docs/screenshots/channel-rich-text.png" alt="OpenSlack — channels with rich text, code blocks, and editor toolbar" width="100%" />
+  <img src="docs/assets/screenshots/channel-rich-text.png" alt="OpenSlaq — channels with rich text, code blocks, and editor toolbar" width="100%" />
 </p>
 
 Real-time team messaging with channels, threads, DMs, huddles, search, and file sharing. Self-host in minutes with Docker.
@@ -18,12 +18,12 @@ Real-time team messaging with channels, threads, DMs, huddles, search, and file 
 Prerequisites: [Bun](https://bun.sh) (v1.1+), [Docker](https://www.docker.com/)
 
 ```bash
-git clone https://github.com/BilalG1/openslack.git
-cd openslack
+git clone https://github.com/BilalG1/openslaq.git
+cd openslaq
 bun install
 cp .env.example .env
 docker compose up -d
-bun run --filter @openslack/api db:migrate
+bun run --filter @openslaq/api db:migrate
 bun run dev
 ```
 
@@ -31,7 +31,7 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Feature Comparison
 
-| Feature | Slack | OpenSlack |
+| Feature | Slaq | OpenSlaq |
 | --- | :---: | :---: |
 | **Messaging** | | |
 | Channels (public & private) | :white_check_mark: | :white_check_mark: |
@@ -72,14 +72,14 @@ Open [http://localhost:3000](http://localhost:3000).
     <td align="center"><strong>Direct Messages</strong></td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/thread-panel.png" alt="Thread panel" width="100%" /></td>
-    <td><img src="docs/screenshots/direct-messages.png" alt="Direct messages" width="100%" /></td>
+    <td><img src="docs/assets/screenshots/thread-panel.png" alt="Thread panel" width="100%" /></td>
+    <td><img src="docs/assets/screenshots/direct-messages.png" alt="Direct messages" width="100%" /></td>
   </tr>
   <tr>
     <td align="center" colspan="2"><strong>Search</strong></td>
   </tr>
   <tr>
-    <td colspan="2"><img src="docs/screenshots/search-modal.png" alt="Search modal" width="100%" /></td>
+    <td colspan="2"><img src="docs/assets/screenshots/search-modal.png" alt="Search modal" width="100%" /></td>
   </tr>
 </table>
 

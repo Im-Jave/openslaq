@@ -59,7 +59,7 @@ describe("channel members", () => {
     const { client: client2 } = await createTestClient({
       id: "api-e2e-member-002",
       displayName: "Member Two",
-      email: "member-002@openslack.dev",
+      email: "member-002@openslaq.dev",
     });
     await addToWorkspace(client, slug, client2);
     await client2.api.workspaces[":slug"].channels[":id"].join.$post({
@@ -88,7 +88,7 @@ describe("channel members", () => {
     const { client: client3 } = await createTestClient({
       id: "api-e2e-member-003",
       displayName: "Member Three",
-      email: "member-003@openslack.dev",
+      email: "member-003@openslaq.dev",
     });
     await addToWorkspace(client, slug, client3);
 
@@ -110,7 +110,7 @@ describe("channel members", () => {
     const { client: client5, user: user5 } = await createTestClient({
       id: `api-e2e-member-005-${testId()}`,
       displayName: "Member Five",
-      email: `member-005-${testId()}@openslack.dev`,
+      email: `member-005-${testId()}@openslaq.dev`,
     });
     await addToWorkspace(client, slug, client5);
 
@@ -141,7 +141,7 @@ describe("channel members", () => {
     const { client: client6, user: user6 } = await createTestClient({
       id: `api-e2e-member-006-${testId()}`,
       displayName: "Member Six",
-      email: `member-006-${testId()}@openslack.dev`,
+      email: `member-006-${testId()}@openslaq.dev`,
     });
     await addToWorkspace(client, slug, client6);
     await client.api.workspaces[":slug"].channels[":id"].members.$post({
@@ -173,7 +173,7 @@ describe("channel members", () => {
     const { client: sockClient, user: sockUser } = await createTestClient({
       id: `api-e2e-sock-join-${testId()}`,
       displayName: "Socket Join User",
-      email: `sock-join-${testId()}@openslack.dev`,
+      email: `sock-join-${testId()}@openslaq.dev`,
     });
     await addToWorkspace(client, slug, sockClient);
 
@@ -207,7 +207,7 @@ describe("channel members", () => {
     const { client: sockClient2, user: sockUser2 } = await createTestClient({
       id: `api-e2e-sock-leave-${testId()}`,
       displayName: "Socket Leave User",
-      email: `sock-leave-${testId()}@openslack.dev`,
+      email: `sock-leave-${testId()}@openslaq.dev`,
     });
     await addToWorkspace(client, slug, sockClient2);
     await client.api.workspaces[":slug"].channels[":id"].members.$post({
@@ -246,7 +246,7 @@ describe("channel members", () => {
     const { client: client4 } = await createTestClient({
       id: "api-e2e-member-004",
       displayName: "Member Four",
-      email: "member-004@openslack.dev",
+      email: "member-004@openslaq.dev",
     });
     await addToWorkspace(client, slug, client4);
     await client4.api.workspaces[":slug"].channels[":id"].join.$post({

@@ -15,7 +15,18 @@ export const jwtVerifyOptions = {
   audience: projectId,
 };
 
-// HMAC secret for e2e tests — only active when E2E_TEST_SECRET is set
-export const e2eTestSecret = env.E2E_TEST_SECRET
-  ? new TextEncoder().encode(env.E2E_TEST_SECRET)
-  : null;
+// HMAC secret for e2e tests — only active in development/test
+const isDevOrTest = process.env.NODE_ENV !== "production";
+
+export const e2eTestSecret = (() => {
+  if (!env.E2E_TEST_SECRET) return null;
+
+  if (!isDevOrTest) {
+    console.warn(
+      "WARNING: E2E_TEST_SECRET is set in production. HMAC auth bypass is disabled in production mode.",
+    );
+    return null;
+  }
+
+  return new TextEncoder().encode(env.E2E_TEST_SECRET);
+})();

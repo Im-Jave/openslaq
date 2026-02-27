@@ -32,7 +32,7 @@ test.describe("UI Screenshots", () => {
 
     await setupMockAuth(page);
     await page.goto(`/w/${testWorkspace.slug}`);
-    await openWorkspaceSettings(page, testWorkspace.slug);
+    await openWorkspaceSettings(page, testWorkspace.name);
     await expect(page.getByTestId("role-badge-e2e-test-user-001")).toBeVisible();
     await page.screenshot({ path: "test-results/workspace-settings.png", fullPage: true });
   });

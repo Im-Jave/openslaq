@@ -1,5 +1,5 @@
 import { expect } from "@playwright/test";
-import { test } from "./helpers/test-workspace";
+import { sharedTest as test } from "./helpers/test-workspace";
 import { setupMockAuth } from "./helpers/mock-auth";
 
 test.describe("Huddle UI", () => {
@@ -11,93 +11,72 @@ test.describe("Huddle UI", () => {
     await expect(page.getByTestId("huddle-start-button")).toBeVisible();
   });
 
-  test("start huddle shows huddle bar in sidebar", async ({ page, testWorkspace }) => {
+  test("start huddle opens popup window with controls", async ({ page, testWorkspace, context }) => {
     await setupMockAuth(page);
     await page.goto(`/w/${testWorkspace.slug}`);
     await page.getByText("# general").click();
 
-    // No huddle bar initially
-    await expect(page.getByTestId("huddle-bar")).not.toBeVisible();
+    // Mock fetch for /api/huddle/join on all pages in the context
+    await context.route("**/api/huddle/join", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          token: "mock-livekit-token",
+          wsUrl: "ws://localhost:3004",
+          roomName: "huddle-test-room",
+        }),
+      }),
+    );
 
-    // Start huddle — mock getUserMedia since Playwright doesn't have real mic access
-    await page.evaluate(() => {
-      // Create a silent audio track for testing
-      const audioContext = new AudioContext();
-      const oscillator = audioContext.createOscillator();
-      const dest = audioContext.createMediaStreamDestination();
-      oscillator.connect(dest);
-      oscillator.start();
-
-      navigator.mediaDevices.getUserMedia = async () => dest.stream;
-    });
-
+    // Wait for popup to open when clicking start
+    const popupPromise = page.waitForEvent("popup");
     await page.getByTestId("huddle-start-button").click();
+    const popup = await popupPromise;
+    await popup.waitForLoadState();
 
-    // Huddle bar should appear
-    await expect(page.getByTestId("huddle-bar")).toBeVisible();
+    // Popup should have the huddle controls
+    await expect(popup.getByTestId("huddle-leave")).toBeVisible();
+    await expect(popup.getByTestId("huddle-mute-toggle")).toBeVisible();
+    await expect(popup.getByTestId("huddle-camera-toggle")).toBeVisible();
+    await expect(popup.getByTestId("huddle-screenshare-toggle")).toBeVisible();
 
-    // Header should show "In huddle"
+    await popup.close();
+  });
+
+  test("closing popup leaves the huddle", async ({ page, testWorkspace, context }) => {
+    await setupMockAuth(page);
+    await page.goto(`/w/${testWorkspace.slug}`);
+    await page.getByText("# general").click();
+
+    // Mock huddle join API on all pages
+    await context.route("**/api/huddle/join", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          token: "mock-livekit-token",
+          wsUrl: "ws://localhost:3004",
+          roomName: "huddle-test-room",
+        }),
+      }),
+    );
+
+    const popupPromise = page.waitForEvent("popup");
+    await page.getByTestId("huddle-start-button").click();
+    const popup = await popupPromise;
+    await popup.waitForLoadState();
+
+    // Huddle should be in progress
     await expect(page.getByTestId("huddle-in-progress")).toBeVisible();
-  });
 
-  test("leave huddle removes huddle bar", async ({ page, testWorkspace }) => {
-    await setupMockAuth(page);
-    await page.goto(`/w/${testWorkspace.slug}`);
-    await page.getByText("# general").click();
+    // Close the popup
+    await popup.close();
 
-    // Mock getUserMedia
-    await page.evaluate(() => {
-      const audioContext = new AudioContext();
-      const oscillator = audioContext.createOscillator();
-      const dest = audioContext.createMediaStreamDestination();
-      oscillator.connect(dest);
-      oscillator.start();
-      navigator.mediaDevices.getUserMedia = async () => dest.stream;
-    });
+    // Wait for the polling interval to detect closed popup (500ms + buffer)
+    await page.waitForTimeout(1000);
 
-    await page.getByTestId("huddle-start-button").click();
-    await expect(page.getByTestId("huddle-bar")).toBeVisible();
-
-    // Leave huddle
-    await page.getByTestId("huddle-leave").click();
-    await expect(page.getByTestId("huddle-bar")).not.toBeVisible();
-
-    // Start button should be visible again
+    // Start button should be visible again (huddle was left)
     await expect(page.getByTestId("huddle-start-button")).toBeVisible();
-  });
-
-  test("mute toggle changes icon", async ({ page, testWorkspace }) => {
-    await setupMockAuth(page);
-    await page.goto(`/w/${testWorkspace.slug}`);
-    await page.getByText("# general").click();
-
-    // Mock getUserMedia
-    await page.evaluate(() => {
-      const audioContext = new AudioContext();
-      const oscillator = audioContext.createOscillator();
-      const dest = audioContext.createMediaStreamDestination();
-      oscillator.connect(dest);
-      oscillator.start();
-      navigator.mediaDevices.getUserMedia = async () => dest.stream;
-    });
-
-    await page.getByTestId("huddle-start-button").click();
-    await expect(page.getByTestId("huddle-bar")).toBeVisible();
-
-    // Get the mute toggle button
-    const muteToggle = page.getByTestId("huddle-mute-toggle");
-    await expect(muteToggle).toBeVisible();
-
-    // Initially the button should show the microphone (unmuted) icon
-    await expect(muteToggle.locator("svg path[d*='M19 11']")).toBeVisible();
-
-    // Click to mute
-    await muteToggle.click();
-    // Muted icon has a different path (speaker with X)
-    await expect(muteToggle.locator("svg path[d*='M5.586']")).toBeVisible();
-
-    // Click to unmute
-    await muteToggle.click();
-    await expect(muteToggle.locator("svg path[d*='M19 11']")).toBeVisible();
   });
 });

@@ -7,21 +7,32 @@ import {
   getAttachmentsForMessages,
   deleteAttachmentsForMessage,
 } from "../uploads/service";
+import { getPresignedDownloadUrl } from "../uploads/s3";
 import { getReactionsForMessages } from "../reactions/service";
+import { storeMentions, deleteMentions, batchMentions } from "./mentions";
 import type {
   Message,
+  Mention,
+  LinkPreview,
+  SharedMessageInfo,
   Attachment,
   ReactionGroup,
+  MessageActionButton,
+  HuddleMessageMetadata,
   MessageId,
   ChannelId,
   UserId,
-} from "@openslack/shared";
+} from "@openslaq/shared";
 import {
   asMessageId,
   asChannelId,
   asUserId,
   asAttachmentId,
-} from "@openslack/shared";
+} from "@openslaq/shared";
+import { getMessageActionsForMessages } from "../bots/service";
+import { batchPinStatus } from "./pinned-service";
+import { batchLinkPreviews } from "./link-preview-service";
+import { channels } from "../channels/schema";
 
 // --- DB type aliases ---
 
@@ -33,12 +44,12 @@ function toAttachment(a: DbAttachment): Attachment {
   return {
     id: asAttachmentId(a.id),
     messageId: a.messageId ? asMessageId(a.messageId) : null,
-    storageKey: a.storageKey,
     filename: a.filename,
     mimeType: a.mimeType,
     size: a.size,
     uploadedBy: asUserId(a.uploadedBy),
     createdAt: a.createdAt.toISOString(),
+    downloadUrl: getPresignedDownloadUrl(a.storageKey),
   };
 }
 
@@ -48,7 +59,13 @@ function toMessage(
   threadMeta?: { replyCount: number; latestReplyAt: Date | null },
   reactions: ReactionGroup[] = [],
   sender?: { displayName: string; avatarUrl: string | null },
+  mentions: Mention[] = [],
+  botInfo?: { botAppId: string; actions: MessageActionButton[] },
+  pinInfo?: { pinnedBy: string; pinnedAt: Date },
+  linkPreviews?: LinkPreview[],
+  sharedMessage?: SharedMessageInfo,
 ): Message {
+  const isBot = m.userId.startsWith("bot:");
   return {
     id: asMessageId(m.id),
     channelId: asChannelId(m.channelId),
@@ -59,8 +76,15 @@ function toMessage(
     latestReplyAt: threadMeta?.latestReplyAt?.toISOString() ?? null,
     attachments: attachments.map(toAttachment),
     reactions,
+    mentions,
     senderDisplayName: sender?.displayName,
     senderAvatarUrl: sender?.avatarUrl ?? null,
+    ...(isBot ? { isBot: true, botAppId: botInfo?.botAppId, actions: botInfo?.actions ?? [] } : {}),
+    ...(m.type ? { type: m.type as "huddle" } : {}),
+    ...(m.metadata ? { metadata: m.metadata as HuddleMessageMetadata } : {}),
+    ...(pinInfo ? { isPinned: true, pinnedBy: asUserId(pinInfo.pinnedBy), pinnedAt: pinInfo.pinnedAt.toISOString() } : {}),
+    ...(linkPreviews?.length ? { linkPreviews } : {}),
+    ...(sharedMessage ? { sharedMessage } : {}),
     createdAt: m.createdAt.toISOString(),
     updatedAt: m.updatedAt.toISOString(),
   };
@@ -129,6 +153,82 @@ async function batchSenders(
   return map;
 }
 
+async function batchBotInfo(messageRows: { id: string; userId: string }[]) {
+  const botMessageIds = messageRows.filter((m) => m.userId.startsWith("bot:")).map((m) => m.id);
+  if (botMessageIds.length === 0) return new Map<string, { botAppId: string; actions: MessageActionButton[] }>();
+  return getMessageActionsForMessages(botMessageIds);
+}
+
+async function batchSharedMessages(
+  messageRows: { id: string; sharedMessageId: string | null }[],
+): Promise<Map<string, SharedMessageInfo>> {
+  const entries = messageRows.filter((m) => m.sharedMessageId != null);
+  if (entries.length === 0) return new Map();
+
+  const sharedIds = [...new Set(entries.map((m) => m.sharedMessageId!))];
+
+  const rows = await db
+    .select({
+      id: messages.id,
+      channelId: messages.channelId,
+      channelName: channels.name,
+      userId: messages.userId,
+      content: messages.content,
+      createdAt: messages.createdAt,
+      senderDisplayName: users.displayName,
+      senderAvatarUrl: users.avatarUrl,
+    })
+    .from(messages)
+    .innerJoin(users, eq(users.id, messages.userId))
+    .innerJoin(channels, eq(channels.id, messages.channelId))
+    .where(inArray(messages.id, sharedIds));
+
+  const infoById = new Map<string, SharedMessageInfo>();
+  for (const row of rows) {
+    infoById.set(row.id, {
+      id: asMessageId(row.id),
+      channelId: asChannelId(row.channelId),
+      channelName: row.channelName,
+      userId: asUserId(row.userId),
+      senderDisplayName: row.senderDisplayName,
+      senderAvatarUrl: row.senderAvatarUrl,
+      content: row.content,
+      createdAt: row.createdAt.toISOString(),
+    });
+  }
+
+  // Map from the referencing message id → SharedMessageInfo
+  const result = new Map<string, SharedMessageInfo>();
+  for (const entry of entries) {
+    const info = infoById.get(entry.sharedMessageId!);
+    if (info) result.set(entry.id, info);
+  }
+  return result;
+}
+
+// --- Hydration ---
+
+export type DbMessageRow = typeof messages.$inferSelect;
+
+export async function hydrateMessages(rows: DbMessageRow[], opts?: { skipThreadMeta?: boolean }): Promise<Message[]> {
+  if (rows.length === 0) return [];
+  const messageIds = rows.map((m) => m.id);
+  const [attachmentsByMessage, threadMeta, reactionsByMessage, sendersByUser, mentionsByMessage, botInfoByMessage, pinStatusByMessage, linkPreviewsByMessage, sharedMessagesByMessage] = await Promise.all([
+    batchAttachments(messageIds),
+    opts?.skipThreadMeta ? new Map() : batchThreadMeta(messageIds),
+    batchReactions(messageIds),
+    batchSenders(rows),
+    batchMentions(messageIds),
+    batchBotInfo(rows),
+    batchPinStatus(messageIds),
+    batchLinkPreviews(messageIds),
+    batchSharedMessages(rows),
+  ]);
+  return rows.map((m) =>
+    toMessage(m, attachmentsByMessage.get(m.id) ?? [], threadMeta.get(m.id), reactionsByMessage.get(m.id) ?? [], sendersByUser.get(m.userId), mentionsByMessage.get(m.id) ?? [], botInfoByMessage.get(m.id), pinStatusByMessage.get(m.id), linkPreviewsByMessage.get(m.id), sharedMessagesByMessage.get(m.id)),
+  );
+}
+
 // --- Public API ---
 
 export async function getMessages(
@@ -158,15 +258,20 @@ export async function getMessages(
   const items = hasMore ? result.slice(0, limit) : result;
 
   const messageIds = items.map((m) => m.id);
-  const [attachmentsByMessage, threadMeta, reactionsByMessage, sendersByUser] = await Promise.all([
+  const [attachmentsByMessage, threadMeta, reactionsByMessage, sendersByUser, mentionsByMessage, botInfoByMessage, pinStatusByMessage, linkPreviewsByMessage, sharedMessagesByMessage] = await Promise.all([
     batchAttachments(messageIds),
     batchThreadMeta(messageIds),
     batchReactions(messageIds),
     batchSenders(items),
+    batchMentions(messageIds),
+    batchBotInfo(items),
+    batchPinStatus(messageIds),
+    batchLinkPreviews(messageIds),
+    batchSharedMessages(items),
   ]);
 
   const serialized = items.map((m) =>
-    toMessage(m, attachmentsByMessage.get(m.id) ?? [], threadMeta.get(m.id), reactionsByMessage.get(m.id) ?? [], sendersByUser.get(m.userId)),
+    toMessage(m, attachmentsByMessage.get(m.id) ?? [], threadMeta.get(m.id), reactionsByMessage.get(m.id) ?? [], sendersByUser.get(m.userId), mentionsByMessage.get(m.id) ?? [], botInfoByMessage.get(m.id), pinStatusByMessage.get(m.id), linkPreviewsByMessage.get(m.id), sharedMessagesByMessage.get(m.id)),
   );
 
   return {
@@ -182,11 +287,16 @@ export async function getMessageById(messageId: MessageId): Promise<Message | nu
 
   if (!message) return null;
 
-  const [attachmentsByMessage, threadMeta, reactionsByMessage, sendersByUser] = await Promise.all([
+  const [attachmentsByMessage, threadMeta, reactionsByMessage, sendersByUser, mentionsByMessage, botInfoByMessage, pinStatusByMessage, linkPreviewsByMessage, sharedMessagesByMessage] = await Promise.all([
     batchAttachments([message.id]),
     batchThreadMeta([message.id]),
     batchReactions([message.id]),
     batchSenders([message]),
+    batchMentions([message.id]),
+    batchBotInfo([message]),
+    batchPinStatus([message.id]),
+    batchLinkPreviews([message.id]),
+    batchSharedMessages([message]),
   ]);
 
   return toMessage(
@@ -195,24 +305,38 @@ export async function getMessageById(messageId: MessageId): Promise<Message | nu
     threadMeta.get(message.id),
     reactionsByMessage.get(message.id) ?? [],
     sendersByUser.get(message.userId),
+    mentionsByMessage.get(message.id) ?? [],
+    botInfoByMessage.get(message.id),
+    pinStatusByMessage.get(message.id),
+    linkPreviewsByMessage.get(message.id),
+    sharedMessagesByMessage.get(message.id),
   );
 }
 
 export async function getThreadReplies(
   parentMessageId: MessageId,
+  channelId: ChannelId,
   cursor?: string,
   limit = 50,
+  direction: "older" | "newer" = "older",
 ): Promise<{ messages: Message[]; nextCursor: MessageId | null }> {
-  const conditions = [eq(messages.parentMessageId, parentMessageId)];
+  const conditions = [
+    eq(messages.parentMessageId, parentMessageId),
+    eq(messages.channelId, channelId),
+  ];
   if (cursor) {
     // Compare directly in SQL to preserve microsecond precision
-    // (JavaScript Date truncates to milliseconds, causing gt() to include the cursor row)
-    conditions.push(sql`${messages.createdAt} > (SELECT created_at FROM messages WHERE id = ${cursor})`);
+    // (JavaScript Date truncates to milliseconds, causing gt()/lt() to include the cursor row)
+    conditions.push(
+      direction === "newer"
+        ? sql`${messages.createdAt} > (SELECT created_at FROM messages WHERE id = ${cursor})`
+        : sql`${messages.createdAt} < (SELECT created_at FROM messages WHERE id = ${cursor})`,
+    );
   }
 
   const result = await db.query.messages.findMany({
     where: and(...conditions),
-    orderBy: asc(messages.createdAt),
+    orderBy: direction === "newer" ? asc(messages.createdAt) : desc(messages.createdAt),
     limit: limit + 1,
   });
 
@@ -220,15 +344,20 @@ export async function getThreadReplies(
   const items = hasMore ? result.slice(0, limit) : result;
 
   const messageIds = items.map((m) => m.id);
-  const [attachmentsByMessage, reactionsByMessage, sendersByUser] = await Promise.all([
+  const [attachmentsByMessage, reactionsByMessage, sendersByUser, mentionsByMessage, botInfoByMessage, pinStatusByMessage, linkPreviewsByMessage, sharedMessagesByMessage] = await Promise.all([
     batchAttachments(messageIds),
     batchReactions(messageIds),
     batchSenders(items),
+    batchMentions(messageIds),
+    batchBotInfo(items),
+    batchPinStatus(messageIds),
+    batchLinkPreviews(messageIds),
+    batchSharedMessages(items),
   ]);
 
   // Replies don't need thread meta (no nested threads)
   const serialized = items.map((m) =>
-    toMessage(m, attachmentsByMessage.get(m.id) ?? [], undefined, reactionsByMessage.get(m.id) ?? [], sendersByUser.get(m.userId)),
+    toMessage(m, attachmentsByMessage.get(m.id) ?? [], undefined, reactionsByMessage.get(m.id) ?? [], sendersByUser.get(m.userId), mentionsByMessage.get(m.id) ?? [], botInfoByMessage.get(m.id), pinStatusByMessage.get(m.id), linkPreviewsByMessage.get(m.id), sharedMessagesByMessage.get(m.id)),
   );
 
   return {
@@ -301,15 +430,20 @@ export async function getMessagesAround(
   });
 
   const messageIds = uniqueRows.map((m) => m.id);
-  const [attachmentsByMessage, threadMeta, reactionsByMessage, sendersByUser] = await Promise.all([
+  const [attachmentsByMessage, threadMeta, reactionsByMessage, sendersByUser, mentionsByMessage, botInfoByMessage, pinStatusByMessage, linkPreviewsByMessage, sharedMessagesByMessage] = await Promise.all([
     batchAttachments(messageIds),
     batchThreadMeta(messageIds),
     batchReactions(messageIds),
     batchSenders(uniqueRows),
+    batchMentions(messageIds),
+    batchBotInfo(uniqueRows),
+    batchPinStatus(messageIds),
+    batchLinkPreviews(messageIds),
+    batchSharedMessages(uniqueRows),
   ]);
 
   const serialized = uniqueRows.map((m) =>
-    toMessage(m, attachmentsByMessage.get(m.id) ?? [], threadMeta.get(m.id), reactionsByMessage.get(m.id) ?? [], sendersByUser.get(m.userId)),
+    toMessage(m, attachmentsByMessage.get(m.id) ?? [], threadMeta.get(m.id), reactionsByMessage.get(m.id) ?? [], sendersByUser.get(m.userId), mentionsByMessage.get(m.id) ?? [], botInfoByMessage.get(m.id), pinStatusByMessage.get(m.id), linkPreviewsByMessage.get(m.id), sharedMessagesByMessage.get(m.id)),
   );
 
   const olderCursor = uniqueRows.length > 0 ? asMessageId(uniqueRows[0]!.id) : null;
@@ -330,27 +464,34 @@ export async function createMessage(
   content: string,
   attachmentIds: string[] = [],
 ): Promise<Message> {
-  return db.transaction(async (tx) => {
-    const [message] = await tx
+  const message = await db.transaction(async (tx) => {
+    const [msg] = await tx
       .insert(messages)
       .values({ channelId, userId, content })
       .returning();
 
-    if (!message) throw new Error("Failed to insert message");
+    if (!msg) throw new Error("Failed to insert message");
 
     if (attachmentIds.length > 0) {
-      const linked = await linkAttachmentsToMessage(attachmentIds, message.id, userId, tx);
+      const linked = await linkAttachmentsToMessage(attachmentIds, msg.id, userId, tx);
       if (linked !== attachmentIds.length) {
         throw new AttachmentLinkError();
       }
     }
 
-    const [messageAttachments, sendersByUser] = await Promise.all([
-      getAttachmentsForMessages([message.id], tx),
-      batchSenders([message]),
-    ]);
-    return toMessage(message, messageAttachments, undefined, [], sendersByUser.get(message.userId));
+    return msg;
   });
+
+  // Store mentions outside the transaction (non-critical)
+  await storeMentions(message.id, channelId, userId, content);
+
+  const [messageAttachments, sendersByUser, mentionsByMessage, botInfoByMessage] = await Promise.all([
+    getAttachmentsForMessages([message.id]),
+    batchSenders([message]),
+    batchMentions([message.id]),
+    batchBotInfo([message]),
+  ]);
+  return toMessage(message, messageAttachments, undefined, [], sendersByUser.get(message.userId), mentionsByMessage.get(message.id) ?? [], botInfoByMessage.get(message.id));
 }
 
 export type ThreadReplyResult =
@@ -381,40 +522,46 @@ export async function createThreadReply(
   if (parent.parentMessageId) return { error: "Cannot reply to a reply" };
   if (parent.channelId !== channelId) return { error: "Parent message not in this channel" };
 
-  return db.transaction(async (tx) => {
-    const [reply] = await tx
+  const reply = await db.transaction(async (tx) => {
+    const [r] = await tx
       .insert(messages)
       .values({ channelId, userId, content, parentMessageId })
       .returning();
 
-    if (!reply) throw new Error("Failed to insert reply");
+    if (!r) throw new Error("Failed to insert reply");
 
     if (attachmentIds.length > 0) {
-      const linked = await linkAttachmentsToMessage(attachmentIds, reply.id, userId, tx);
+      const linked = await linkAttachmentsToMessage(attachmentIds, r.id, userId, tx);
       if (linked !== attachmentIds.length) {
         throw new AttachmentLinkError();
       }
     }
 
-    const [replyAttachments, sendersByUser] = await Promise.all([
-      getAttachmentsForMessages([reply.id], tx),
-      batchSenders([reply]),
-    ]);
-
-    // Get updated thread meta for the parent (outside tx is fine, but using tx for consistency)
-    const threadMeta = await batchThreadMeta([parentMessageId]);
-    const meta = threadMeta.get(parentMessageId);
-
-    return {
-      reply: toMessage(reply, replyAttachments, undefined, [], sendersByUser.get(reply.userId)),
-      threadUpdate: {
-        parentMessageId: asMessageId(parentMessageId),
-        channelId: asChannelId(channelId),
-        replyCount: meta?.replyCount ?? 1,
-        latestReplyAt: meta?.latestReplyAt?.toISOString() ?? reply.createdAt.toISOString(),
-      },
-    };
+    return r;
   });
+
+  // Store mentions outside the transaction (non-critical)
+  await storeMentions(reply.id, channelId, userId, content);
+
+  const [replyAttachments, sendersByUser, mentionsByMessage, botInfoByMessage] = await Promise.all([
+    getAttachmentsForMessages([reply.id]),
+    batchSenders([reply]),
+    batchMentions([reply.id]),
+    batchBotInfo([reply]),
+  ]);
+
+  const threadMeta = await batchThreadMeta([parentMessageId]);
+  const meta = threadMeta.get(parentMessageId);
+
+  return {
+    reply: toMessage(reply, replyAttachments, undefined, [], sendersByUser.get(reply.userId), mentionsByMessage.get(reply.id) ?? [], botInfoByMessage.get(reply.id)),
+    threadUpdate: {
+      parentMessageId: asMessageId(parentMessageId),
+      channelId: asChannelId(channelId),
+      replyCount: meta?.replyCount ?? 1,
+      latestReplyAt: meta?.latestReplyAt?.toISOString() ?? reply.createdAt.toISOString(),
+    },
+  };
 }
 
 export async function editMessage(
@@ -430,11 +577,20 @@ export async function editMessage(
 
   if (!updated) return null;
 
-  const [attachmentsByMessage, threadMeta, reactionsByMessage, sendersByUser] = await Promise.all([
+  // Re-process mentions: delete old, store new
+  await deleteMentions(updated.id);
+  await storeMentions(updated.id, asChannelId(updated.channelId), asUserId(updated.userId), content);
+
+  const [attachmentsByMessage, threadMeta, reactionsByMessage, sendersByUser, mentionsByMessage, botInfoByMessage, pinStatusByMessage, linkPreviewsByMessage, sharedMessagesByMessage] = await Promise.all([
     batchAttachments([updated.id]),
     batchThreadMeta([updated.id]),
     batchReactions([updated.id]),
     batchSenders([updated]),
+    batchMentions([updated.id]),
+    batchBotInfo([updated]),
+    batchPinStatus([updated.id]),
+    batchLinkPreviews([updated.id]),
+    batchSharedMessages([updated]),
   ]);
 
   return toMessage(
@@ -443,6 +599,11 @@ export async function editMessage(
     threadMeta.get(updated.id),
     reactionsByMessage.get(updated.id) ?? [],
     sendersByUser.get(updated.userId),
+    mentionsByMessage.get(updated.id) ?? [],
+    botInfoByMessage.get(updated.id),
+    pinStatusByMessage.get(updated.id),
+    linkPreviewsByMessage.get(updated.id),
+    sharedMessagesByMessage.get(updated.id),
   );
 }
 
@@ -460,4 +621,90 @@ export async function deleteMessage(messageId: MessageId, userId: UserId): Promi
   await db.delete(messages).where(eq(messages.id, messageId));
 
   return { id: asMessageId(message.id), channelId: asChannelId(message.channelId) };
+}
+
+export async function createHuddleMessage(
+  channelId: ChannelId,
+  userId: UserId,
+  metadata: HuddleMessageMetadata,
+): Promise<Message> {
+  const [msg] = await db
+    .insert(messages)
+    .values({ channelId, userId, content: "", type: "huddle", metadata })
+    .returning();
+
+  if (!msg) throw new Error("Failed to insert huddle message");
+
+  const sendersByUser = await batchSenders([msg]);
+  return toMessage(msg, [], undefined, [], sendersByUser.get(msg.userId));
+}
+
+export async function updateHuddleMessage(
+  messageId: string,
+  metadata: HuddleMessageMetadata,
+): Promise<Message | null> {
+  const [updated] = await db
+    .update(messages)
+    .set({ metadata, updatedAt: new Date() })
+    .where(eq(messages.id, messageId))
+    .returning();
+
+  if (!updated) return null;
+
+  const sendersByUser = await batchSenders([updated]);
+  return toMessage(updated, [], undefined, [], sendersByUser.get(updated.userId));
+}
+
+export async function closeOrphanedHuddleMessages(): Promise<number> {
+  const result = await db
+    .update(messages)
+    .set({
+      metadata: sql`jsonb_set(COALESCE(metadata, '{}'::jsonb), '{huddleEndedAt}', to_jsonb(now()::text))`,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(
+        eq(messages.type, "huddle"),
+        sql`(metadata->>'huddleEndedAt') IS NULL`,
+      ),
+    )
+    .returning({ id: messages.id });
+  return result.length;
+}
+
+export async function createSharedMessage(
+  destinationChannelId: ChannelId,
+  userId: UserId,
+  sharedMessageId: MessageId,
+  comment: string,
+): Promise<Message> {
+  const [msg] = await db
+    .insert(messages)
+    .values({
+      channelId: destinationChannelId,
+      userId,
+      content: comment,
+      sharedMessageId,
+    })
+    .returning();
+
+  if (!msg) throw new Error("Failed to insert shared message");
+
+  const [sendersByUser, sharedMessagesByMessage] = await Promise.all([
+    batchSenders([msg]),
+    batchSharedMessages([msg]),
+  ]);
+
+  return toMessage(
+    msg,
+    [],
+    undefined,
+    [],
+    sendersByUser.get(msg.userId),
+    [],
+    undefined,
+    undefined,
+    undefined,
+    sharedMessagesByMessage.get(msg.id),
+  );
 }

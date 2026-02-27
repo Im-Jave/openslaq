@@ -6,7 +6,7 @@ import { SECOND_USER } from "./helpers/api";
 
 async function openGeneralChannel(page: Page, workspaceSlug: string) {
   // Clear sidebar collapse state that may persist from other tests in same worker
-  await page.addInitScript(() => localStorage.removeItem("openslack-sidebar-collapse"));
+  await page.addInitScript(() => localStorage.removeItem("openslaq-sidebar-collapse"));
 
   // Navigate and handle auth redirect if needed (retry only for auth)
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -90,7 +90,7 @@ test.describe("User Profile Sidebar", () => {
 
     await expect(page.getByTestId("profile-sidebar")).toBeVisible();
     await expect(page.getByTestId("profile-display-name")).toContainText("Test User");
-    await expect(page.getByTestId("profile-email")).toContainText("test@openslack.dev");
+    await expect(page.getByTestId("profile-email")).toContainText("test@openslaq.dev");
     await expect(page.getByTestId("profile-role")).toBeVisible();
     await expect(page.getByTestId("profile-presence")).toBeVisible();
   });

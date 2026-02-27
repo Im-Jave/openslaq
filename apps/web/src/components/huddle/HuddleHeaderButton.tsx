@@ -1,4 +1,4 @@
-import type { HuddleState } from "@openslack/shared";
+import type { HuddleState } from "@openslaq/shared";
 import { Button, Tooltip } from "../ui";
 
 interface HuddleHeaderButtonProps {

@@ -2,8 +2,8 @@
 @import "@fontsource-variable/inter";
 
 @theme {
-  --color-slack-blue: #1264a3;
-  --color-slack-green: #007a5a;
+  --color-slaq-blue: #1264a3;
+  --color-slaq-green: #007a5a;
 
   --color-surface: var(--surface);
   --color-surface-secondary: var(--surface-secondary);

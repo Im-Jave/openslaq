@@ -2,9 +2,34 @@ import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import { createInviteSchema } from "./invite-validation";
 import { createInvite, listInvites, revokeInvite } from "./invite-service";
 import { requireRole, type WorkspaceMemberEnv } from "./role-middleware";
-import { ROLES } from "@openslack/shared";
+import { ROLES } from "@openslaq/shared";
 import { rlInviteAdmin, rlRead } from "../rate-limit";
 import { workspaceInviteSchema, okSchema, errorSchema } from "../openapi/schemas";
+import { jsonResponse } from "../openapi/responses";
+
+function toInviteResponse(invite: {
+  id: string;
+  workspaceId: string;
+  code: string;
+  createdBy: string;
+  maxUses: number | null;
+  useCount: number;
+  expiresAt: Date | null;
+  revokedAt: Date | null;
+  createdAt: Date;
+}) {
+  return {
+    id: invite.id,
+    workspaceId: invite.workspaceId,
+    code: invite.code,
+    createdBy: invite.createdBy,
+    maxUses: invite.maxUses,
+    useCount: invite.useCount,
+    expiresAt: invite.expiresAt?.toISOString() ?? null,
+    revokedAt: invite.revokedAt?.toISOString() ?? null,
+    createdAt: invite.createdAt.toISOString(),
+  };
+}
 
 const listInvitesRoute = createRoute({
   method: "get",
@@ -62,7 +87,7 @@ const app = new OpenAPIHono<WorkspaceMemberEnv>()
   .openapi(listInvitesRoute, async (c) => {
     const workspace = c.get("workspace");
     const invites = await listInvites(workspace.id);
-    return c.json(invites as any, 200);
+    return jsonResponse(c, invites.map(toInviteResponse), 200);
   })
   .openapi(createInviteRoute, async (c) => {
     const workspace = c.get("workspace");
@@ -76,7 +101,7 @@ const app = new OpenAPIHono<WorkspaceMemberEnv>()
       expiresInHours,
     );
 
-    return c.json(invite as any, 201);
+    return jsonResponse(c, toInviteResponse(invite), 201);
   })
   .openapi(revokeInviteRoute, async (c) => {
     const workspace = c.get("workspace");

@@ -15,6 +15,7 @@ describe("workspace members", () => {
   test("list members — includes creating user", async () => {
     const res = await client.api.workspaces[":slug"].members.$get({
       param: { slug },
+      query: {},
     });
     expect(res.status).toBe(200);
     const members = (await res.json()) as {
@@ -37,12 +38,13 @@ describe("workspace members", () => {
     const { client: client2 } = await createTestClient({
       id: `api-e2e-member-002-${uid}`,
       displayName: "Member Two",
-      email: `member-002-${uid}@openslack.dev`,
+      email: `member-002-${uid}@openslaq.dev`,
     });
     await addToWorkspace(client, slug, client2);
 
     const res = await client.api.workspaces[":slug"].members.$get({
       param: { slug },
+      query: {},
     });
     expect(res.status).toBe(200);
     const members = (await res.json()) as { id: string }[];

@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db";
-import type { SearchResult, SearchResultItem, WorkspaceId, UserId } from "@openslack/shared";
-import { asMessageId, asChannelId, asUserId } from "@openslack/shared";
+import type { SearchResult, SearchResultItem, WorkspaceId, UserId } from "@openslaq/shared";
+import { asMessageId, asChannelId, asUserId, CHANNEL_TYPES } from "@openslaq/shared";
 import type { SearchQuery } from "./validation";
 
 /** Escape HTML in ts_headline output, preserving only <mark>/<​/mark> tags. */
@@ -22,6 +22,13 @@ function sanitizeHeadline(raw: string): string {
   // Restore <mark> tags
   s = s.replace(markOpenRe, "<mark>").replace(markCloseRe, "</mark>");
   return s;
+}
+
+function parseChannelType(value: string): SearchResultItem["channelType"] {
+  if (value === CHANNEL_TYPES.PUBLIC || value === CHANNEL_TYPES.PRIVATE || value === CHANNEL_TYPES.DM) {
+    return value;
+  }
+  throw new Error(`Unexpected channel type: ${value}`);
 }
 
 export async function searchMessages(
@@ -110,7 +117,7 @@ export async function searchMessages(
       messageId: asMessageId(r.message_id),
       channelId: asChannelId(r.channel_id),
       channelName: r.channel_name,
-      channelType: r.channel_type as SearchResultItem["channelType"],
+      channelType: parseChannelType(r.channel_type),
       userId: asUserId(r.user_id),
       userDisplayName: r.user_display_name,
       content: r.content,

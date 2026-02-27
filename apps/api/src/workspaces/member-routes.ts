@@ -1,14 +1,16 @@
 import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
-import { eq } from "drizzle-orm";
+import { eq, and, ilike } from "drizzle-orm";
 import { db } from "../db";
 import { workspaceMembers } from "./schema";
 import { users } from "../users/schema";
 import { requireRole, type WorkspaceMemberEnv } from "./role-middleware";
 import { getWorkspaceMember, updateMemberRole, removeMember } from "./service";
-import { ROLES } from "@openslack/shared";
-import type { UserId } from "@openslack/shared";
+import { ROLES } from "@openslaq/shared";
+import type { UserId } from "@openslaq/shared";
 import { rlRead } from "../rate-limit";
 import { workspaceMemberSchema, okSchema, errorSchema } from "../openapi/schemas";
+import { jsonResponse } from "../openapi/responses";
+import { escapeLike } from "../lib/escape-like";
 
 const updateRoleSchema = z.object({
   role: z.enum(["admin", "member"]).describe("New role"),
@@ -19,9 +21,14 @@ const listMembersRoute = createRoute({
   path: "/",
   tags: ["Workspaces"],
   summary: "List workspace members",
-  description: "Returns all members of the workspace with their roles.",
+  description: "Returns all members of the workspace with their roles. Optionally filter by display name.",
   security: [{ Bearer: [] }],
   middleware: [rlRead] as const,
+  request: {
+    query: z.object({
+      q: z.string().optional().describe("Filter by display name (case-insensitive prefix match)"),
+    }),
+  },
   responses: {
     200: {
       content: { "application/json": { schema: z.array(workspaceMemberSchema) } },
@@ -72,9 +79,41 @@ const removeMemberRoute = createRoute({
   },
 });
 
+async function getMemberResponse(workspaceId: string, userId: string) {
+  const rows = await db
+    .select({
+      id: users.id,
+      displayName: users.displayName,
+      email: users.email,
+      avatarUrl: users.avatarUrl,
+      role: workspaceMembers.role,
+      createdAt: users.createdAt,
+      joinedAt: workspaceMembers.joinedAt,
+    })
+    .from(workspaceMembers)
+    .innerJoin(users, eq(workspaceMembers.userId, users.id))
+    .where(and(eq(workspaceMembers.workspaceId, workspaceId), eq(workspaceMembers.userId, userId)))
+    .limit(1);
+
+  const row = rows[0];
+  if (!row) return null;
+
+  return {
+    ...row,
+    createdAt: row.createdAt.toISOString(),
+    joinedAt: row.joinedAt.toISOString(),
+  };
+}
+
 const app = new OpenAPIHono<WorkspaceMemberEnv>()
   .openapi(listMembersRoute, async (c) => {
     const workspace = c.get("workspace");
+    const { q } = c.req.valid("query");
+
+    const conditions = [eq(workspaceMembers.workspaceId, workspace.id)];
+    if (q) {
+      conditions.push(ilike(users.displayName, `%${escapeLike(q)}%`));
+    }
 
     const members = await db
       .select({
@@ -88,9 +127,13 @@ const app = new OpenAPIHono<WorkspaceMemberEnv>()
       })
       .from(workspaceMembers)
       .innerJoin(users, eq(workspaceMembers.userId, users.id))
-      .where(eq(workspaceMembers.workspaceId, workspace.id));
+      .where(and(...conditions));
 
-    return c.json(members as any, 200);
+    return jsonResponse(c, members.map((member) => ({
+      ...member,
+      createdAt: member.createdAt.toISOString(),
+      joinedAt: member.joinedAt.toISOString(),
+    })), 200);
   })
   .openapi(updateRoleRoute, async (c) => {
     const workspace = c.get("workspace");
@@ -116,8 +159,12 @@ const app = new OpenAPIHono<WorkspaceMemberEnv>()
       return c.json({ error: "Admins cannot change other admins' roles" }, 403);
     }
 
-    const updated = await updateMemberRole(workspace.id, targetUserId, newRole);
-    return c.json(updated as any, 200);
+    await updateMemberRole(workspace.id, targetUserId, newRole);
+    const updated = await getMemberResponse(workspace.id, targetUserId);
+    if (!updated) {
+      return c.json({ error: "Member not found" }, 404);
+    }
+    return jsonResponse(c, updated, 200);
   })
   .openapi(removeMemberRoute, async (c) => {
     const workspace = c.get("workspace");

@@ -8,7 +8,7 @@ export async function openWorkspaceChannel(
   user?: Partial<MockUser>,
 ): Promise<void> {
   // Clear sidebar collapse state that may persist from other tests in same worker
-  await page.addInitScript(() => localStorage.removeItem("openslack-sidebar-collapse"));
+  await page.addInitScript(() => localStorage.removeItem("openslaq-sidebar-collapse"));
   await setupMockAuth(page, user);
   await page.goto(`/w/${slug}`);
   await page.getByText(`# ${channelName}`).click();

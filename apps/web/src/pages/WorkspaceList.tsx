@@ -28,7 +28,7 @@ export function WorkspaceListPage() {
   const [loading, setLoading] = useState(!isGallery);
   const [error, setError] = useState<string | null>(null);
 
-  const { listWorkspaces } = useWorkspacesApi(user);
+  const { listWorkspaces } = useWorkspacesApi();
 
   // Redirect unauthenticated users in real mode
   useEffect(() => {
@@ -84,7 +84,7 @@ export function WorkspaceListPage() {
       {/* Navbar */}
       <nav className="sticky top-0 z-10 bg-surface border-b border-border-default">
         <div className="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
-          <span className="text-lg font-bold text-primary">OpenSlack</span>
+          <span className="text-lg font-bold text-primary">OpenSlaq</span>
           {!isGallery && <CustomUserButton />}
         </div>
       </nav>
@@ -92,7 +92,7 @@ export function WorkspaceListPage() {
       <main className="max-w-4xl mx-auto px-6 py-10">
         {loading && (
           <div className="flex items-center justify-center py-20">
-            <div className="animate-spin rounded-full h-8 w-8 border-2 border-border-default border-t-slack-blue" />
+            <div className="animate-spin rounded-full h-8 w-8 border-2 border-border-default border-t-slaq-blue" />
           </div>
         )}
 
@@ -104,7 +104,7 @@ export function WorkspaceListPage() {
 
         {isEmpty && (
           <div className="text-center py-20">
-            <h1 className="text-3xl font-bold text-primary mb-2">Welcome to OpenSlack</h1>
+            <h1 className="text-3xl font-bold text-primary mb-2">Welcome to OpenSlaq</h1>
             <p className="text-muted text-lg mb-8">Get started by creating a workspace</p>
             <Link
               to="/create-workspace"
@@ -136,7 +136,7 @@ export function WorkspaceListPage() {
                   type="button"
                   onClick={() => navigate(`/w/${ws.slug}`)}
                   data-testid={`workspace-card-${ws.slug}`}
-                  className="text-left p-5 bg-surface rounded-xl border border-border-default hover:border-slack-blue hover:shadow-md transition-all cursor-pointer"
+                  className="text-left p-5 bg-surface rounded-xl border border-border-default hover:border-slaq-blue hover:shadow-md transition-all cursor-pointer"
                 >
                   <div className="flex items-start justify-between mb-1">
                     <h2 className="font-semibold text-primary text-lg">{ws.name}</h2>

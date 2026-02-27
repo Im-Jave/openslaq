@@ -3,7 +3,7 @@ import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "./tests",
   fullyParallel: true,
-  workers: 8,
+  workers: 6,
   retries: 1,
   timeout: 60_000,
   reporter: "html",
@@ -23,7 +23,7 @@ export default defineConfig({
       timeout: 30_000,
       reuseExistingServer: !process.env.CI,
       env: {
-        E2E_TEST_SECRET: "openslack-e2e-test-secret-do-not-use-in-prod",
+        E2E_TEST_SECRET: "openslaq-e2e-test-secret-do-not-use-in-prod",
         VITE_STACK_PROJECT_ID: "test-project-id",
         ADMIN_USER_IDS: "admin-test-user",
       },

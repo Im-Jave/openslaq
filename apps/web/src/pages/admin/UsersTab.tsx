@@ -10,10 +10,6 @@ import {
 } from "../../components/ui/dialog";
 import { getErrorMessage } from "../../lib/errors";
 
-interface AuthJsonUser {
-  getAuthJson: () => Promise<{ accessToken?: string | null }>;
-}
-
 interface AdminUser {
   id: string;
   displayName: string;
@@ -25,8 +21,8 @@ interface AdminUser {
   workspaceCount: number;
 }
 
-export function UsersTab({ user }: { user: AuthJsonUser }) {
-  const { getUsers, impersonate } = useAdminApi(user);
+export function UsersTab() {
+  const { getUsers, impersonate } = useAdminApi();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);

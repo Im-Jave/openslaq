@@ -1,10 +1,14 @@
 import { useEffect, useState } from "react";
 import { useUser } from "@stackframe/react";
 import clsx from "clsx";
+import type { BotApp } from "@openslaq/shared";
 import { useWorkspaceMembersApi } from "../../hooks/api/useWorkspaceMembersApi";
 import { useWorkspacesApi } from "../../hooks/api/useWorkspacesApi";
+import { useBotsApi } from "../../hooks/api/useBotsApi";
 import { useChatStore } from "../../state/chat-store";
 import { getErrorMessage } from "../../lib/errors";
+import { BotCreateDialog } from "./BotCreateDialog";
+import { BotConfigDialog } from "./BotConfigDialog";
 import {
   Dialog,
   DialogContent,
@@ -44,9 +48,14 @@ export function WorkspaceSettingsDialog({ open, onOpenChange, workspaceSlug }: W
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [bots, setBots] = useState<BotApp[]>([]);
+  const [showCreateBot, setShowCreateBot] = useState(false);
+  const [configuringBot, setConfiguringBot] = useState<BotApp | null>(null);
+
   const { dispatch } = useChatStore();
-  const { listMembers, updateRole, removeMember, deleteWorkspace } = useWorkspaceMembersApi(user);
-  const { listWorkspaces } = useWorkspacesApi(user);
+  const { listMembers, updateRole, removeMember, deleteWorkspace } = useWorkspaceMembersApi();
+  const { listWorkspaces } = useWorkspacesApi();
+  const { listBotApps, toggleBotEnabled } = useBotsApi();
 
   const currentUserRole = members.find((m) => m.id === user?.id)?.role;
   const isOwner = currentUserRole === "owner";
@@ -74,6 +83,14 @@ export function WorkspaceSettingsDialog({ open, onOpenChange, workspaceSlug }: W
         if (ws) {
           setWorkspaceName(ws.name);
         }
+
+        // Load bots (only visible to admin+, but load attempt won't error for members)
+        try {
+          const botData = await listBotApps(workspaceSlug);
+          if (!cancelled) setBots(botData);
+        } catch {
+          // Non-admin can't list bots — that's fine
+        }
       } catch (err) {
         if (!cancelled) {
           setError(getErrorMessage(err, "Failed to load workspace settings"));
@@ -90,7 +107,7 @@ export function WorkspaceSettingsDialog({ open, onOpenChange, workspaceSlug }: W
     return () => {
       cancelled = true;
     };
-  }, [open, listMembers, listWorkspaces, user, workspaceSlug]);
+  }, [open, listMembers, listWorkspaces, listBotApps, user, workspaceSlug]);
 
   // Reset state when dialog closes
   useEffect(() => {
@@ -104,6 +121,24 @@ export function WorkspaceSettingsDialog({ open, onOpenChange, workspaceSlug }: W
     if (!workspaceSlug) return;
     const data = await listMembers(workspaceSlug);
     setMembers(data);
+  };
+
+  const refreshBots = async () => {
+    if (!workspaceSlug) return;
+    try {
+      const data = await listBotApps(workspaceSlug);
+      setBots(data);
+    } catch { /* ignore if non-admin */ }
+  };
+
+  const handleToggleBot = async (botId: string, enabled: boolean) => {
+    if (!workspaceSlug) return;
+    try {
+      await toggleBotEnabled(workspaceSlug, botId, enabled);
+      await refreshBots();
+    } catch (err) {
+      setError(getErrorMessage(err, "Failed to toggle bot"));
+    }
   };
 
   const handleRoleChange = async (userId: string, newRole: string) => {
@@ -267,6 +302,71 @@ export function WorkspaceSettingsDialog({ open, onOpenChange, workspaceSlug }: W
                 </div>
               </div>
 
+              {canManage && bots.length >= 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h2 className="text-sm font-semibold text-primary m-0">
+                      Bots ({bots.length})
+                    </h2>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      data-testid="add-bot-btn"
+                      onClick={() => setShowCreateBot(true)}
+                    >
+                      Add Bot
+                    </Button>
+                  </div>
+                  {bots.length > 0 && (
+                    <div className="bg-surface-secondary rounded-lg border border-border-default">
+                      {bots.map((bot) => (
+                        <div
+                          key={bot.id}
+                          data-testid={`bot-row-${bot.id}`}
+                          className="flex items-center px-4 py-3 border-b border-border-secondary gap-3 last:border-b-0"
+                        >
+                          <Avatar
+                            src={bot.avatarUrl}
+                            fallback={bot.name}
+                            size="md"
+                            shape="rounded"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-primary truncate">{bot.name}</span>
+                              <Badge variant="blue" size="sm">APP</Badge>
+                              {!bot.enabled && <Badge variant="gray" size="sm">Disabled</Badge>}
+                            </div>
+                            {bot.description && (
+                              <div className="text-xs text-muted truncate">{bot.description}</div>
+                            )}
+                          </div>
+
+                          <label className="flex items-center gap-1.5 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={bot.enabled}
+                              onChange={(e) => void handleToggleBot(bot.id, e.target.checked)}
+                              data-testid={`bot-toggle-${bot.id}`}
+                            />
+                            <span className="text-xs text-muted">{bot.enabled ? "On" : "Off"}</span>
+                          </label>
+
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            data-testid={`configure-bot-${bot.id}`}
+                            onClick={() => setConfiguringBot(bot)}
+                          >
+                            Configure
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {isOwner && (
                 <div className="bg-surface-secondary rounded-lg border border-danger-border p-4">
                   <h2 className="text-sm font-semibold text-danger-text m-0 mb-2">
@@ -306,6 +406,20 @@ export function WorkspaceSettingsDialog({ open, onOpenChange, workspaceSlug }: W
           )}
         </div>
       </DialogContent>
+
+      <BotCreateDialog
+        open={showCreateBot}
+        onOpenChange={setShowCreateBot}
+        workspaceSlug={workspaceSlug}
+        onCreated={() => void refreshBots()}
+      />
+      <BotConfigDialog
+        open={!!configuringBot}
+        onOpenChange={(open) => { if (!open) setConfiguringBot(null); }}
+        workspaceSlug={workspaceSlug}
+        bot={configuringBot}
+        onUpdated={() => void refreshBots()}
+      />
     </Dialog>
   );
 }

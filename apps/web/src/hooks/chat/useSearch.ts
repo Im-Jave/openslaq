@@ -1,10 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { useCurrentUser } from "../useCurrentUser";
-import type { SearchResultItem } from "@openslack/shared";
+import type { SearchResultItem } from "@openslaq/shared";
+import { searchMessages, getErrorMessage } from "@openslaq/client-core";
 import { api } from "../../api";
-import { authorizedRequest } from "../../lib/api-client";
-import { AuthError, getErrorMessage } from "../../lib/errors";
-import { redirectToAuth } from "../../lib/auth";
+import { useAuthProvider } from "../../lib/api-client";
 import { useChatStore } from "../../state/chat-store";
 import { useGalleryMode, useGalleryMockData } from "../../gallery/gallery-context";
 
@@ -25,10 +23,10 @@ interface SearchState {
 }
 
 export function useSearch(workspaceSlug: string | undefined) {
-  const user = useCurrentUser();
   const { state } = useChatStore();
   const isGallery = useGalleryMode();
   const galleryMockData = useGalleryMockData();
+  const auth = useAuthProvider();
   const [filters, setFilters] = useState<SearchFilters>({ q: "" });
   const [searchState, setSearchState] = useState<SearchState>({
     results: [],
@@ -99,46 +97,30 @@ export function useSearch(workspaceSlug: string | undefined) {
         }));
         return;
       }
-      if (!user || !workspaceSlug) {
+      if (!workspaceSlug) {
         setSearchState({ results: [], total: 0, loading: false, error: null, offset: 0 });
         return;
       }
 
       abortRef.current?.abort();
-      const controller = new AbortController();
-      abortRef.current = controller;
+      abortRef.current = new AbortController();
 
       setSearchState((prev) => ({ ...prev, loading: true, error: null }));
 
       try {
-        const query: {
-          q: string;
-          offset: number;
-          limit: number;
-          channelId?: string;
-          userId?: string;
-          fromDate?: string;
-          toDate?: string;
-        } = {
-          q: searchFilters.q,
-          offset,
-          limit: 20,
-        };
-        if (searchFilters.channelId) query.channelId = searchFilters.channelId;
-        if (searchFilters.userId) query.userId = searchFilters.userId;
-        if (searchFilters.fromDate) query.fromDate = searchFilters.fromDate;
-        if (searchFilters.toDate) query.toDate = searchFilters.toDate;
-
-        const response = await authorizedRequest(user, (headers) =>
-          api.api.workspaces[":slug"].search.$get(
-            { param: { slug: workspaceSlug }, query },
-            { headers, init: { signal: controller.signal } },
-          ),
+        const data = await searchMessages(
+          { api, auth },
+          {
+            workspaceSlug,
+            q: searchFilters.q,
+            offset,
+            limit: 20,
+            channelId: searchFilters.channelId,
+            userId: searchFilters.userId,
+            fromDate: searchFilters.fromDate,
+            toDate: searchFilters.toDate,
+          },
         );
-
-        if (controller.signal.aborted) return;
-
-        const data = (await response.json()) as { results: SearchResultItem[]; total: number };
 
         setSearchState((prev) => ({
           results: append ? [...prev.results, ...data.results] : data.results,
@@ -148,11 +130,6 @@ export function useSearch(workspaceSlug: string | undefined) {
           offset,
         }));
       } catch (err) {
-        if (controller.signal.aborted) return;
-        if (err instanceof AuthError) {
-          redirectToAuth();
-          return;
-        }
         setSearchState((prev) => ({
           ...prev,
           loading: false,
@@ -160,7 +137,7 @@ export function useSearch(workspaceSlug: string | undefined) {
         }));
       }
     },
-    [galleryMockData?.search?.defaultResponse, galleryMockData?.search?.responses, isGallery, state.channels, state.dms, state.messagesById, user, workspaceSlug],
+    [auth, galleryMockData?.search?.defaultResponse, galleryMockData?.search?.responses, isGallery, state.channels, state.dms, state.messagesById, workspaceSlug],
   );
 
   const updateFilters = useCallback(

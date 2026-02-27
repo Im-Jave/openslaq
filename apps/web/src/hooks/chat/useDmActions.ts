@@ -1,10 +1,9 @@
 import { useCallback } from "react";
-import { asChannelId, asUserId } from "@openslack/shared";
+import { asChannelId, asUserId } from "@openslaq/shared";
+import { createDm as coreCreateDm, createGroupDm as coreCreateGroupDm } from "@openslaq/client-core";
 import { api } from "../../api";
-import { authorizedRequest } from "../../lib/api-client";
-import { redirectToAuth } from "../../lib/auth";
-import { AuthError, getErrorMessage } from "../../lib/errors";
-import { useChatStore, type DmConversation } from "../../state/chat-store";
+import { useAuthProvider } from "../../lib/api-client";
+import { useChatStore, type DmConversation, type GroupDmConversation } from "../../state/chat-store";
 import { useGalleryMode, useGalleryMockData } from "../../gallery/gallery-context";
 
 interface AuthJsonUser {
@@ -16,6 +15,7 @@ export function useDmActions(user: AuthJsonUser | null | undefined, workspaceSlu
   const { state, dispatch } = useChatStore();
   const isGallery = useGalleryMode();
   const mockData = useGalleryMockData();
+  const auth = useAuthProvider();
 
   const createDm = useCallback(
     async (targetUserId: string): Promise<DmConversation | null> => {
@@ -47,6 +47,8 @@ export function useDmActions(user: AuthJsonUser | null | undefined, workspaceSlu
             name: "dm",
             type: "dm",
             description: null,
+            displayName: null,
+            isArchived: false,
             createdBy: asUserId(user.id),
             createdAt: new Date().toISOString(),
           },
@@ -63,36 +65,26 @@ export function useDmActions(user: AuthJsonUser | null | undefined, workspaceSlu
         return dm;
       }
 
-      try {
-        dispatch({ type: "mutations/error", error: null });
-        const response = await authorizedRequest(user, (headers) =>
-          api.api.workspaces[":slug"].dm.$post(
-            { param: { slug: workspaceSlug }, json: { userId: targetUserId } },
-            { headers },
-          ),
-        );
-
-        const data = await response.json();
-        if (!("channel" in data) || !data.otherUser) {
-          return null;
-        }
-
-        const newDm: DmConversation = { channel: data.channel, otherUser: data.otherUser };
-        dispatch({ type: "workspace/addDm", dm: newDm });
-        dispatch({ type: "workspace/selectDm", channelId: data.channel.id });
-        return newDm;
-      } catch (err) {
-        if (err instanceof AuthError) {
-          redirectToAuth();
-          return null;
-        }
-
-        dispatch({ type: "mutations/error", error: getErrorMessage(err, "Failed to create DM") });
-        return null;
-      }
+      const deps = { api, auth, dispatch, getState: () => state };
+      return coreCreateDm(deps, { workspaceSlug, targetUserId });
     },
-    [dispatch, isGallery, mockData?.members, state.dms, state.workspaces, user, workspaceSlug],
+    [auth, dispatch, isGallery, mockData?.members, state, user, workspaceSlug],
   );
 
-  return { createDm };
+  const createGroupDm = useCallback(
+    async (memberIds: string[]): Promise<GroupDmConversation | null> => {
+      if (!user || !workspaceSlug) return null;
+
+      if (isGallery) {
+        dispatch({ type: "mutations/error", error: "Group DMs not supported in demo mode" });
+        return null;
+      }
+
+      const deps = { api, auth, dispatch, getState: () => state };
+      return coreCreateGroupDm(deps, { workspaceSlug, memberIds });
+    },
+    [auth, dispatch, isGallery, state, user, workspaceSlug],
+  );
+
+  return { createDm, createGroupDm };
 }

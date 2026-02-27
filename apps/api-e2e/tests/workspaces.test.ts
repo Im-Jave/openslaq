@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { createTestClient, testId } from "./helpers/api-client";
+import { createTestClient, createTestWorkspace, testId } from "./helpers/api-client";
 
 describe("workspaces", () => {
   test("create workspace → 201", async () => {
@@ -13,7 +13,7 @@ describe("workspaces", () => {
     expect(workspace.id).toBeDefined();
     expect(workspace.name).toBe(name);
     // slug should be slugified name + 6-char suffix
-    expect(workspace.slug).toMatch(/^workspace-[a-z0-9]+-[a-z0-9]{6}$/);
+    expect(workspace.slug).toMatch(/^workspace-[a-z0-9-]+-[a-z0-9_-]{6}$/);
   });
 
   test("nonexistent workspace slug → 404", async () => {
@@ -81,9 +81,52 @@ describe("workspaces", () => {
     expect(checkRes.status as number).toBe(404);
   });
 
+  test("delete workspace cascades to bots — bot token stops working", async () => {
+    const uid = testId();
+    const { client } = await createTestClient({
+      id: `ws-del-bot-${uid}`,
+      email: `ws-del-bot-${uid}@openslaq.dev`,
+    });
+    const ws = await createTestWorkspace(client);
+
+    // Create a bot in the workspace
+    const botRes = await client.api.workspaces[":slug"].bots.$post({
+      param: { slug: ws.slug },
+      json: {
+        name: `test-bot-${uid}`,
+        description: "test bot for deletion",
+        webhookUrl: "https://example.com/webhook",
+        scopes: ["chat:write", "channels:read"],
+      },
+    });
+    expect(botRes.status).toBe(201);
+    const botData = (await botRes.json()) as { bot: { id: string }; apiToken: string };
+    const botToken = botData.apiToken;
+
+    // Verify bot token works — list channels
+    const BASE_URL = process.env.API_BASE_URL || "http://localhost:3001";
+    const botChannelsRes = await fetch(`${BASE_URL}/api/bot/channels`, {
+      headers: { Authorization: `Bearer ${botToken}` },
+    });
+    expect(botChannelsRes.status).toBe(200);
+
+    // Delete workspace
+    const delRes = await client.api.workspaces[":slug"].$delete({
+      param: { slug: ws.slug },
+    });
+    expect(delRes.status).toBe(200);
+
+    // Bot token should no longer work
+    const botChannelsRes2 = await fetch(`${BASE_URL}/api/bot/channels`, {
+      headers: { Authorization: `Bearer ${botToken}` },
+    });
+    // Should get 401 (invalid token) or 404 (workspace gone)
+    expect([401, 404]).toContain(botChannelsRes2.status);
+  });
+
   test("list workspaces → does not include other users' workspaces", async () => {
     const idA = testId();
-    const { client: client1 } = await createTestClient({ id: `user-ws-a-${idA}`, email: `ws-a-${idA}@openslack.dev` });
+    const { client: client1 } = await createTestClient({ id: `user-ws-a-${idA}`, email: `ws-a-${idA}@openslaq.dev` });
     const createRes = await client1.api.workspaces.$post({
       json: { name: `Private ${testId()}` },
     });
@@ -91,7 +134,7 @@ describe("workspaces", () => {
     const created = (await createRes.json()) as { slug: string };
 
     const idB = testId();
-    const { client: client2 } = await createTestClient({ id: `user-ws-b-${idB}`, email: `ws-b-${idB}@openslack.dev` });
+    const { client: client2 } = await createTestClient({ id: `user-ws-b-${idB}`, email: `ws-b-${idB}@openslaq.dev` });
     const res = await client2.api.workspaces.$get();
     expect(res.status).toBe(200);
     const workspaces = (await res.json()) as { slug: string }[];

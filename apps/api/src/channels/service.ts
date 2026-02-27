@@ -2,16 +2,18 @@ import { eq, and, count, or, exists } from "drizzle-orm";
 import { db } from "../db";
 import { channels, channelMembers } from "./schema";
 import { users } from "../users/schema";
-import type { Channel, ChannelId, ChannelType, WorkspaceId, UserId } from "@openslack/shared";
-import { asChannelId, asWorkspaceId, asUserId, CHANNEL_TYPES } from "@openslack/shared";
+import type { Channel, ChannelId, ChannelType, WorkspaceId, UserId } from "@openslaq/shared";
+import { asChannelId, asWorkspaceId, asUserId, CHANNEL_TYPES } from "@openslaq/shared";
 
 function toChannel(row: typeof channels.$inferSelect, memberCount?: number): Channel {
   return {
     id: asChannelId(row.id),
     workspaceId: asWorkspaceId(row.workspaceId),
     name: row.name,
-    type: row.type as Channel["type"],
+    type: row.type,
     description: row.description,
+    displayName: row.displayName ?? null,
+    isArchived: row.isArchived,
     createdBy: row.createdBy ? asUserId(row.createdBy) : null,
     createdAt: row.createdAt.toISOString(),
     memberCount,
@@ -39,6 +41,7 @@ export async function listChannels(workspaceId: WorkspaceId, userId: UserId): Pr
     .where(
       and(
         eq(channels.workspaceId, workspaceId),
+        eq(channels.isArchived, false),
         or(
           eq(channels.type, CHANNEL_TYPES.PUBLIC),
           and(eq(channels.type, CHANNEL_TYPES.PRIVATE), exists(memberSubquery)),
@@ -135,6 +138,76 @@ export async function removeChannelMember(channelId: ChannelId, userId: UserId):
         eq(channelMembers.userId, userId),
       ),
     );
+}
+
+export async function updateChannel(
+  channelId: ChannelId,
+  data: { description: string | null },
+): Promise<Channel> {
+  const [updated] = await db
+    .update(channels)
+    .set({ description: data.description })
+    .where(eq(channels.id, channelId))
+    .returning();
+  if (!updated) throw new Error("Channel not found");
+  return toChannel(updated);
+}
+
+export async function browsePublicChannels(workspaceId: WorkspaceId, userId: UserId, includeArchived = false) {
+  const membershipSubquery = db
+    .select({ _: channelMembers.channelId })
+    .from(channelMembers)
+    .where(
+      and(
+        eq(channelMembers.channelId, channels.id),
+        eq(channelMembers.userId, userId),
+      ),
+    );
+
+  const conditions = [
+    eq(channels.workspaceId, workspaceId),
+    eq(channels.type, CHANNEL_TYPES.PUBLIC),
+  ];
+  if (!includeArchived) {
+    conditions.push(eq(channels.isArchived, false));
+  }
+
+  const rows = await db
+    .select({
+      channel: channels,
+      memberCount: count(channelMembers.userId),
+      isMember: exists(membershipSubquery),
+    })
+    .from(channels)
+    .leftJoin(channelMembers, eq(channels.id, channelMembers.channelId))
+    .where(and(...conditions))
+    .groupBy(channels.id)
+    .orderBy(channels.name);
+
+  return rows.map((r) => ({
+    ...toChannel(r.channel, r.memberCount),
+    isMember: Boolean(r.isMember),
+  }));
+}
+
+export async function archiveChannel(channelId: ChannelId): Promise<Channel> {
+  const [updated] = await db
+    .update(channels)
+    .set({ isArchived: true })
+    .where(eq(channels.id, channelId))
+    .returning();
+  if (!updated) throw new Error("Channel not found");
+  return toChannel(updated);
+}
+
+export async function unarchiveChannel(channelId: ChannelId): Promise<Channel> {
+  const [updated] = await db
+    .update(channels)
+    .set({ isArchived: false })
+    .where(eq(channels.id, channelId))
+    .returning();
+  if (!updated) throw new Error("Channel not found");
+  return toChannel(updated);
 }
 
 export async function listChannelMembers(channelId: ChannelId) {

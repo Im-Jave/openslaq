@@ -3,10 +3,6 @@ import { useAdminApi } from "../../hooks/api/useAdminApi";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 
-interface AuthJsonUser {
-  getAuthJson: () => Promise<{ accessToken?: string | null }>;
-}
-
 interface AdminWorkspace {
   id: string;
   name: string;
@@ -17,8 +13,8 @@ interface AdminWorkspace {
   messageCount: number;
 }
 
-export function WorkspacesTab({ user }: { user: AuthJsonUser }) {
-  const { getWorkspaces } = useAdminApi(user);
+export function WorkspacesTab() {
+  const { getWorkspaces } = useAdminApi();
   const [workspaces, setWorkspaces] = useState<AdminWorkspace[]>([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);

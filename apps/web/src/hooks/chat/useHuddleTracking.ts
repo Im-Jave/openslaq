@@ -1,41 +1,39 @@
 import { useCallback } from "react";
-import type { HuddleState, ChannelId } from "@openslack/shared";
+import type { HuddleState, ChannelId } from "@openslaq/shared";
+import {
+  handleHuddleSync,
+  handleHuddleStarted,
+  handleHuddleUpdated,
+  handleHuddleEnded,
+} from "@openslaq/client-core";
 import { useSocketEvent } from "../useSocketEvent";
 import { useChatStore } from "../../state/chat-store";
 
 export function useHuddleTracking() {
   const { dispatch } = useChatStore();
 
-  const handleSync = useCallback(
-    (payload: { huddles: HuddleState[] }) => {
-      dispatch({ type: "huddle/sync", huddles: payload.huddles });
-    },
+  const onSync = useCallback(
+    (payload: { huddles: HuddleState[] }) => dispatch(handleHuddleSync(payload)),
     [dispatch],
   );
 
-  const handleStarted = useCallback(
-    (huddle: HuddleState) => {
-      dispatch({ type: "huddle/started", huddle });
-    },
+  const onStarted = useCallback(
+    (huddle: HuddleState) => dispatch(handleHuddleStarted(huddle)),
     [dispatch],
   );
 
-  const handleUpdated = useCallback(
-    (huddle: HuddleState) => {
-      dispatch({ type: "huddle/updated", huddle });
-    },
+  const onUpdated = useCallback(
+    (huddle: HuddleState) => dispatch(handleHuddleUpdated(huddle)),
     [dispatch],
   );
 
-  const handleEnded = useCallback(
-    (payload: { channelId: ChannelId }) => {
-      dispatch({ type: "huddle/ended", channelId: payload.channelId });
-    },
+  const onEnded = useCallback(
+    (payload: { channelId: ChannelId }) => dispatch(handleHuddleEnded(payload)),
     [dispatch],
   );
 
-  useSocketEvent("huddle:sync", handleSync);
-  useSocketEvent("huddle:started", handleStarted);
-  useSocketEvent("huddle:updated", handleUpdated);
-  useSocketEvent("huddle:ended", handleEnded);
+  useSocketEvent("huddle:sync", onSync);
+  useSocketEvent("huddle:started", onStarted);
+  useSocketEvent("huddle:updated", onUpdated);
+  useSocketEvent("huddle:ended", onEnded);
 }

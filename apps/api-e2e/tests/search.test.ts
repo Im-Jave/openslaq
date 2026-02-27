@@ -76,7 +76,7 @@ describe("search", () => {
     const { client: client2 } = await createTestClient({
       id: `search-user2-${uid}`,
       displayName: "Search User 2",
-      email: `search-user2-${uid}@openslack.dev`,
+      email: `search-user2-${uid}@openslaq.dev`,
     });
     await addToWorkspace(client, slug, client2);
     const joinRes = await client2.api.workspaces[":slug"].channels[":id"].join.$post({
@@ -190,7 +190,7 @@ describe("search", () => {
     const { client: client2 } = await createTestClient({
       id: `search-outsider-${testId()}`,
       displayName: "Outsider",
-      email: `outsider-${testId()}@openslack.dev`,
+      email: `outsider-${testId()}@openslaq.dev`,
     });
     await addToWorkspace(client, slug, client2);
     // Search should return 0 results because they are not channel members
@@ -201,6 +201,59 @@ describe("search", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { results: unknown[]; total: number };
     expect(body.total).toBe(0);
+  });
+
+  test("search does not leak DM messages to non-participants", async () => {
+    const uid = testId();
+    const keyword = `secretword${uid}`;
+
+    // Create user B + C in the workspace
+    const { client: clientB } = await createTestClient({
+      id: `search-dm-b-${uid}`,
+      displayName: "Search DM B",
+      email: `search-dm-b-${uid}@openslaq.dev`,
+    });
+    await addToWorkspace(client, slug, clientB);
+
+    const { client: clientC } = await createTestClient({
+      id: `search-dm-c-${uid}`,
+      displayName: "Search DM C",
+      email: `search-dm-c-${uid}@openslaq.dev`,
+    });
+    await addToWorkspace(client, slug, clientC);
+
+    // Default user creates DM with B
+    const dmRes = await client.api.workspaces[":slug"].dm.$post({
+      param: { slug },
+      json: { userId: `search-dm-b-${uid}` },
+    });
+    const dm = (await dmRes.json()) as { channel: { id: string } };
+
+    // Send message with unique keyword in DM
+    await client.api.workspaces[":slug"].channels[":id"].messages.$post({
+      param: { slug, id: dm.channel.id },
+      json: { content: `This is ${keyword} in DM` },
+    });
+
+    await new Promise((r) => setTimeout(r, 100));
+
+    // User C (non-participant) searches → 0 results
+    const resC = await clientC.api.workspaces[":slug"].search.$get({
+      param: { slug },
+      query: { q: keyword },
+    });
+    expect(resC.status).toBe(200);
+    const bodyC = (await resC.json()) as { results: unknown[]; total: number };
+    expect(bodyC.total).toBe(0);
+
+    // User B (DM participant) searches → 1 result
+    const resB = await clientB.api.workspaces[":slug"].search.$get({
+      param: { slug },
+      query: { q: keyword },
+    });
+    expect(resB.status).toBe(200);
+    const bodyB = (await resB.json()) as { results: unknown[]; total: number };
+    expect(bodyB.total).toBe(1);
   });
 
   test("messages-around endpoint returns surrounding messages", async () => {

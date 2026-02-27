@@ -4,7 +4,7 @@ import { auth } from "../auth/middleware";
 import { getWorkspaceBySlug, deleteWorkspace } from "./service";
 import type { WorkspaceEnv } from "./types";
 import { resolveMemberRole, requireRole, type WorkspaceMemberEnv } from "./role-middleware";
-import { ROLES, type WorkspaceId } from "@openslack/shared";
+import { ROLES } from "@openslaq/shared";
 import channelRoutes from "../channels/routes";
 import channelMessageRoutes from "../messages/channel-routes";
 import memberRoutes from "./member-routes";
@@ -13,10 +13,16 @@ import inviteRoutes from "./invite-routes";
 import unreadRoutes from "../channels/unread-routes";
 import presenceRoutes from "../presence/routes";
 import searchRoutes from "../search/routes";
+import botAdminRoutes from "../bots/admin-routes";
+import allUnreadsRoutes from "../channels/unreads-routes";
+import groupDmRoutes from "../group-dm/routes";
 import { okSchema, errorSchema } from "../openapi/schemas";
 
 const resolveWorkspace = createMiddleware<WorkspaceEnv>(async (c, next) => {
-  const slug = c.req.param("slug")!;
+  const slug = c.req.param("slug");
+  if (!slug) {
+    return c.json({ error: "Workspace not found" }, 404);
+  }
   const workspace = await getWorkspaceBySlug(slug);
   if (!workspace) {
     return c.json({ error: "Workspace not found" }, 404);
@@ -49,7 +55,7 @@ app.use(resolveMemberRole);
 const routes = app
   .openapi(deleteWorkspaceRoute, async (c) => {
     const workspace = c.get("workspace");
-    await deleteWorkspace(workspace.id as WorkspaceId);
+    await deleteWorkspace(workspace.id);
     return c.json({ ok: true as const }, 200);
   })
   .route("/channels", channelRoutes)
@@ -58,7 +64,10 @@ const routes = app
   .route("/dm", dmRoutes)
   .route("/invites", inviteRoutes)
   .route("/unread-counts", unreadRoutes)
+  .route("/unreads", allUnreadsRoutes)
   .route("/presence", presenceRoutes)
-  .route("/search", searchRoutes);
+  .route("/search", searchRoutes)
+  .route("/group-dm", groupDmRoutes)
+  .route("/", botAdminRoutes);
 
 export default routes;

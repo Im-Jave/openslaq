@@ -1,0 +1,144 @@
+import { memo, useMemo } from "react";
+import { Text, Linking } from "react-native";
+import Markdown, { type RenderRules } from "@ronradtke/react-native-markdown-display";
+import type { Mention } from "@openslaq/shared";
+import { useMobileTheme } from "@/theme/ThemeProvider";
+import { MentionBadge } from "./MentionBadge";
+import { CodeBlock } from "./CodeBlock";
+
+interface Props {
+  content: string;
+  mentions?: Mention[];
+  onPressMention?: (userId: string) => void;
+}
+
+const MENTION_REGEX = /<@([^>]+)>/g;
+
+/**
+ * Preprocess mentions: replace `<@token>` with markdown links `[@name](mention:token)`
+ * so the markdown renderer can handle them via a custom link rule.
+ */
+function preprocessMentions(content: string, mentions: Mention[]): string {
+  return content.replace(MENTION_REGEX, (_match, token: string) => {
+    if (token === "here" || token === "channel") {
+      return `[@${token}](mention:${token})`;
+    }
+    const mention = mentions.find((m) => m.userId === token);
+    const displayName = mention?.displayName ?? token;
+    return `[@${displayName}](mention:${token})`;
+  });
+}
+
+function MessageContentInner({ content, mentions = [], onPressMention }: Props) {
+  const { theme, mode } = useMobileTheme();
+  const isDark = mode === "dark";
+
+  const processedContent = useMemo(
+    () => preprocessMentions(content, mentions),
+    [content, mentions],
+  );
+
+  const markdownStyles = useMemo(
+    () => ({
+      body: {
+        color: theme.colors.textSecondary,
+        fontSize: 15,
+        lineHeight: 21,
+      },
+      paragraph: {
+        marginTop: 0,
+        marginBottom: 0,
+      },
+      strong: {
+        fontWeight: "700" as const,
+        color: theme.colors.textPrimary,
+      },
+      em: {
+        fontStyle: "italic" as const,
+      },
+      s: {
+        textDecorationLine: "line-through" as const,
+      },
+      code_inline: {
+        backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)",
+        color: isDark ? "#e06c75" : "#c7254e",
+        paddingHorizontal: 4,
+        paddingVertical: 1,
+        borderRadius: 3,
+        fontSize: 13,
+        fontFamily: "Courier",
+      },
+      blockquote: {
+        borderLeftWidth: 3,
+        borderLeftColor: theme.colors.borderStrong,
+        paddingLeft: 10,
+        marginVertical: 4,
+        backgroundColor: "transparent",
+      },
+      bullet_list: {
+        marginVertical: 2,
+      },
+      ordered_list: {
+        marginVertical: 2,
+      },
+      list_item: {
+        marginVertical: 1,
+      },
+      link: {
+        color: theme.brand.primary,
+        textDecorationLine: "underline" as const,
+      },
+      fence: {
+        // Hide default fence styling — we render our own CodeBlock
+        display: "none" as const,
+      },
+    }),
+    [theme, isDark],
+  );
+
+  const rules: RenderRules = useMemo(
+    () => ({
+      link: (node, children, _parent, styles) => {
+        const href = node.attributes?.href ?? "";
+        if (href.startsWith("mention:")) {
+          const token = href.slice("mention:".length);
+          // Extract display name from the link text (first child text)
+          const displayName = node.children?.[0]?.content?.replace(/^@/, "") ?? token;
+          return (
+            <MentionBadge
+              key={node.key}
+              token={token}
+              displayName={displayName}
+              onPress={onPressMention}
+            />
+          );
+        }
+        return (
+          <Text
+            key={node.key}
+            style={styles.link}
+            onPress={() => {
+              if (href) void Linking.openURL(href);
+            }}
+          >
+            {children}
+          </Text>
+        );
+      },
+      fence: (node) => {
+        const language = node.sourceInfo ?? undefined;
+        const code = node.content?.replace(/\n$/, "") ?? "";
+        return <CodeBlock key={node.key} language={language}>{code}</CodeBlock>;
+      },
+    }),
+    [onPressMention],
+  );
+
+  return (
+    <Markdown style={markdownStyles} rules={rules}>
+      {processedContent}
+    </Markdown>
+  );
+}
+
+export const MessageContent = memo(MessageContentInner);

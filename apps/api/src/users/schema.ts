@@ -6,6 +6,9 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   avatarUrl: text("avatar_url"),
   lastSeenAt: timestamp("last_seen_at"),
+  statusEmoji: text("status_emoji"),
+  statusText: text("status_text"),
+  statusExpiresAt: timestamp("status_expires_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

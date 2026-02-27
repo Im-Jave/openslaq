@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef } from "react";
 
-const PREFIX = "openslack-draft-";
+const PREFIX = "openslaq-draft-";
 const DEBOUNCE_MS = 300;
 
 function readDraft(key: string): string | null {

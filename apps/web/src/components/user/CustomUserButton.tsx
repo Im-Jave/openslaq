@@ -1,7 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { UserButton } from "@stackframe/react";
 import { useTheme } from "../../theme/ThemeProvider";
 import { UserSettingsDialog } from "../settings/UserSettingsDialog";
+import { SetStatusDialog } from "./SetStatusDialog";
+import { useChatStore } from "../../state/chat-store";
+import { useCurrentUser } from "../../hooks/useCurrentUser";
+
+function isStatusExpired(expiresAt: string | null | undefined): boolean {
+  if (!expiresAt) return false;
+  return new Date(expiresAt).getTime() <= Date.now();
+}
 
 interface CustomUserButtonProps {
   showUserInfo?: boolean;
@@ -10,12 +18,37 @@ interface CustomUserButtonProps {
 export function CustomUserButton({ showUserInfo }: CustomUserButtonProps) {
   const { mode, cycle } = useTheme();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [statusOpen, setStatusOpen] = useState(false);
+  const user = useCurrentUser();
+  const { state } = useChatStore();
+
+  const userId = user?.id;
+  const presence = userId ? state.presence[userId] : undefined;
+  const hasStatus = presence && !isStatusExpired(presence.statusExpiresAt) && (presence.statusEmoji || presence.statusText);
+  const statusLabel = hasStatus
+    ? `${presence.statusEmoji ?? ""} ${presence.statusText ?? ""}`.trim()
+    : "Set a status";
+
+  useEffect(() => {
+    const handler = () => setSettingsOpen(true);
+    window.addEventListener("openslaq:open-settings", handler);
+    return () => window.removeEventListener("openslaq:open-settings", handler);
+  }, []);
 
   return (
     <>
       <UserButton
         showUserInfo={showUserInfo}
         extraItems={[
+          {
+            text: statusLabel,
+            icon: (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            ),
+            onClick: () => setStatusOpen(true),
+          },
           {
             text: "Settings",
             icon: (
@@ -38,6 +71,12 @@ export function CustomUserButton({ showUserInfo }: CustomUserButtonProps) {
         ]}
       />
       <UserSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <SetStatusDialog
+        open={statusOpen}
+        onOpenChange={setStatusOpen}
+        currentEmoji={hasStatus ? (presence.statusEmoji ?? null) : null}
+        currentText={hasStatus ? (presence.statusText ?? null) : null}
+      />
     </>
   );
 }

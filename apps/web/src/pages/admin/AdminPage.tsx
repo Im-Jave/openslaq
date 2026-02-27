@@ -15,8 +15,8 @@ const TABS = [
 ];
 
 export function AdminPage() {
-  const user = useUser({ or: "redirect" });
-  const { checkAdmin } = useAdminApi(user);
+  useUser({ or: "redirect" });
+  const { checkAdmin } = useAdminApi();
   const [authorized, setAuthorized] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -31,7 +31,7 @@ export function AdminPage() {
       <header className="border-b border-border-strong bg-surface px-6 py-4">
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold text-primary">Admin Dashboard</h1>
-          <a href="/" className="text-sm text-slack-blue hover:underline">
+          <a href="/" className="text-sm text-slaq-blue hover:underline">
             Back to app
           </a>
         </div>
@@ -44,7 +44,7 @@ export function AdminPage() {
               className={({ isActive }) =>
                 `px-3 py-1.5 text-sm rounded-md transition-colors ${
                   isActive
-                    ? "bg-slack-blue text-white"
+                    ? "bg-slaq-blue text-white"
                     : "text-muted hover:bg-surface-secondary"
                 }`
               }
@@ -57,10 +57,10 @@ export function AdminPage() {
 
       <main className="p-6">
         <Routes>
-          <Route index element={<OverviewTab user={user} />} />
-          <Route path="users" element={<UsersTab user={user} />} />
-          <Route path="workspaces" element={<WorkspacesTab user={user} />} />
-          <Route path="activity" element={<ActivityTab user={user} />} />
+          <Route index element={<OverviewTab />} />
+          <Route path="users" element={<UsersTab />} />
+          <Route path="workspaces" element={<WorkspacesTab />} />
+          <Route path="activity" element={<ActivityTab />} />
         </Routes>
       </main>
     </div>

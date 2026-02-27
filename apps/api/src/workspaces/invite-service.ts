@@ -4,7 +4,7 @@ import { db } from "../db";
 import { workspaceInvites } from "./invite-schema";
 import { workspaceMembers, workspaces } from "./schema";
 import { channels, channelMembers } from "../channels/schema";
-import { DEFAULT_CHANNELS } from "@openslack/shared";
+import { DEFAULT_CHANNELS } from "@openslaq/shared";
 
 export async function createInvite(
   workspaceId: string,
@@ -20,7 +20,10 @@ export async function createInvite(
     .values({ workspaceId, code, createdBy, maxUses: maxUses ?? null, expiresAt })
     .returning();
 
-  return invite!;
+  if (!invite) {
+    throw new Error("Failed to create invite");
+  }
+  return invite;
 }
 
 export async function getInviteByCode(code: string) {
@@ -74,7 +77,10 @@ export async function acceptInvite(code: string, userId: string) {
       const workspace = await tx.query.workspaces.findFirst({
         where: eq(workspaces.id, invite.workspaceId),
       });
-      return { workspace: workspace! };
+      if (!workspace) {
+        return { error: "Workspace not found" as const };
+      }
+      return { workspace };
     }
 
     // Atomically increment useCount only if invite is still valid
@@ -122,6 +128,9 @@ export async function acceptInvite(code: string, userId: string) {
       where: eq(workspaces.id, invite.workspaceId),
     });
 
-    return { workspace: workspace! };
+    if (!workspace) {
+      return { error: "Workspace not found" as const };
+    }
+    return { workspace };
   });
 }

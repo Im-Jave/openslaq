@@ -7,6 +7,7 @@ export const rlChannelCreate = rateLimit({ bucket: "channel-create", max: 5, win
 export const rlWorkspaceCreate = rateLimit({ bucket: "workspace-create", max: 3, windowSec: 60 });
 
 // Tier 2 - Mutations
+export const rlPin = rateLimit({ bucket: "pin", max: 30, windowSec: 60 });
 export const rlReaction = rateLimit({ bucket: "reaction", max: 30, windowSec: 60 });
 export const rlChannelJoinLeave = rateLimit({ bucket: "channel-join-leave", max: 10, windowSec: 60 });
 export const rlMarkAsRead = rateLimit({ bucket: "mark-as-read", max: 60, windowSec: 60 });
@@ -20,3 +21,7 @@ export const rlRead = rateLimit({ bucket: "read", max: 120, windowSec: 60 });
 // Tier 4 - Brute-force (IP-based)
 export const rlInviteAccept = rateLimitByIp({ bucket: "invite-accept", max: 5, windowSec: 60 });
 export const rlInvitePreview = rateLimitByIp({ bucket: "invite-preview", max: 20, windowSec: 60 });
+
+// Tier 5 - Bot API
+export const rlBotSend = rateLimit({ bucket: "bot-send", max: 60, windowSec: 60 });
+export const rlBotRead = rateLimit({ bucket: "bot-read", max: 240, windowSec: 60 });

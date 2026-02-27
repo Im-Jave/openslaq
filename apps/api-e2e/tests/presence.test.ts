@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeAll, beforeEach } from "bun:test";
-import { createTestClient, createTestWorkspace, testId } from "./helpers/api-client";
+import { addToWorkspace, createTestClient, createTestWorkspace, testId } from "./helpers/api-client";
 import {
   addSocket,
   removeSocket,
@@ -7,6 +7,7 @@ import {
   persistLastSeen,
   getUserWorkspaceIds,
 } from "../../api/src/presence/service";
+import { getPresenceSnapshotForWorkspaces } from "../../api/src/socket";
 
 describe("presence", () => {
   let client1: Awaited<ReturnType<typeof createTestClient>>["client"];
@@ -22,14 +23,14 @@ describe("presence", () => {
     const ctx1 = await createTestClient({
       id: user1Id,
       displayName: "Presence User 1",
-      email: `presence1-${testId()}@openslack.dev`,
+      email: `presence1-${testId()}@openslaq.dev`,
     });
     client1 = ctx1.client;
 
     const ctx2 = await createTestClient({
       id: user2Id,
       displayName: "Presence User 2",
-      email: `presence2-${testId()}@openslack.dev`,
+      email: `presence2-${testId()}@openslaq.dev`,
     });
     client2 = ctx2.client;
 
@@ -187,6 +188,38 @@ describe("presence", () => {
     test("getUserWorkspaceIds returns workspace IDs for a member", async () => {
       const ids = await getUserWorkspaceIds(user1Id);
       expect(ids.length).toBeGreaterThanOrEqual(1);
+    });
+
+    test("presence snapshot includes members across all user workspaces (deduped)", async () => {
+      const id = testId();
+      const ownerA = await createTestClient({
+        id: `presence-owner-a-${id}`,
+        email: `presence-owner-a-${id}@openslaq.dev`,
+      });
+      const ownerB = await createTestClient({
+        id: `presence-owner-b-${id}`,
+        email: `presence-owner-b-${id}@openslaq.dev`,
+      });
+      const shared = await createTestClient({
+        id: `presence-shared-${id}`,
+        email: `presence-shared-${id}@openslaq.dev`,
+      });
+
+      const wsA = await createTestWorkspace(ownerA.client);
+      const wsB = await createTestWorkspace(ownerB.client);
+      await addToWorkspace(ownerA.client, wsA.slug, shared.client);
+      await addToWorkspace(ownerB.client, wsB.slug, shared.client);
+
+      const workspaceIds = await getUserWorkspaceIds(shared.user.id);
+      expect(workspaceIds.length).toBeGreaterThanOrEqual(2);
+
+      const rows = await getPresenceSnapshotForWorkspaces(workspaceIds);
+      const userIds = new Set(rows.map((r) => r.userId));
+
+      expect(userIds.has(ownerA.user.id)).toBe(true);
+      expect(userIds.has(ownerB.user.id)).toBe(true);
+      expect(userIds.has(shared.user.id)).toBe(true);
+      expect(rows.filter((r) => r.userId === shared.user.id).length).toBe(1);
     });
   });
 });

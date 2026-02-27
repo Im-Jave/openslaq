@@ -7,7 +7,8 @@
     "@typescript-eslint/no-explicit-any": "error",
     "eqeqeq": "error",
     "no-var": "error",
-    "prefer-const": "error"
+    "prefer-const": "error",
+    "react/no-direct-mutation-state": "error"
   },
-  "ignorePatterns": ["node_modules", "dist", ".vite"]
+  "ignorePatterns": ["node_modules", "dist", ".vite", "target", "ios", "android"]
 }

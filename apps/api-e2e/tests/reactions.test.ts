@@ -108,7 +108,7 @@ describe("reactions", () => {
     const { client: client2 } = await createTestClient({
       id: "api-e2e-react-user-002",
       displayName: "Reaction User 2",
-      email: "api-e2e-react-002@openslack.dev",
+      email: "api-e2e-react-002@openslaq.dev",
     });
     await addToWorkspace(client, slug, client2);
     await client2.api.workspaces[":slug"].channels[":id"].join.$post({

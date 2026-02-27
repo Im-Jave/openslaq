@@ -1,9 +1,10 @@
 import { useCallback, useEffect } from "react";
-import type { Message } from "@openslack/shared";
+import type { Message } from "@openslaq/shared";
+import { handleNewMessageUnread, markChannelAsRead } from "@openslaq/client-core";
+import { api } from "../../api";
+import { useAuthProvider } from "../../lib/api-client";
 import { useSocketEvent } from "../useSocketEvent";
 import { useChatStore } from "../../state/chat-store";
-import { api } from "../../api";
-import { authorizedRequest } from "../../lib/api-client";
 import { useGalleryMode } from "../../gallery/gallery-context";
 
 interface AuthJsonUser {
@@ -13,41 +14,39 @@ interface AuthJsonUser {
 
 export function useUnreadTracking(user: AuthJsonUser | null | undefined, workspaceSlug?: string) {
   const { state, dispatch } = useChatStore();
+  const isGallery = useGalleryMode();
+  const auth = useAuthProvider();
 
-  const handleNewMessage = useCallback(
+  const onNewMessage = useCallback(
     (message: Message) => {
-      // Only count top-level messages (not thread replies)
-      if (message.parentMessageId) return;
-
-      // Don't count own messages as unread
-      if (user && message.userId === user.id) return;
-
-      // Only increment if the message is for a non-active channel
-      const activeId = state.activeChannelId ?? state.activeDmId;
-      if (message.channelId === activeId) return;
-
-      dispatch({ type: "unread/increment", channelId: message.channelId });
+      if (!user) return;
+      const action = handleNewMessageUnread(message, {
+        currentUserId: user.id,
+        activeChannelId: state.activeChannelId,
+        activeDmId: state.activeDmId,
+        channelNotificationPrefs: state.channelNotificationPrefs,
+      });
+      if (action) dispatch(action);
     },
-    [state.activeChannelId, state.activeDmId, dispatch, user],
+    [state.activeChannelId, state.activeDmId, state.channelNotificationPrefs, dispatch, user],
   );
 
-  useSocketEvent("message:new", handleNewMessage);
+  useSocketEvent("message:new", onNewMessage);
 
   // Mark-as-read when user views a channel/DM
   const activeChannelId = state.activeChannelId;
   const activeDmId = state.activeDmId;
-  const isGallery = useGalleryMode();
+  const markedUnreadChannelId = state.markedUnreadChannelId;
 
   useEffect(() => {
     if (isGallery) return;
     const channelId = activeChannelId ?? activeDmId;
-    if (!channelId || !user || !workspaceSlug) return;
+    if (!channelId || !workspaceSlug) return;
 
-    void authorizedRequest(user, (headers) =>
-      api.api.workspaces[":slug"].channels[":id"].read.$post(
-        { param: { slug: workspaceSlug, id: channelId } },
-        { headers },
-      ),
-    );
-  }, [activeChannelId, activeDmId, isGallery, user, workspaceSlug]);
+    // Suppress auto-mark-as-read if user just marked this channel as unread
+    if (channelId === markedUnreadChannelId) return;
+
+    const deps = { api, auth, dispatch, getState: () => state };
+    void markChannelAsRead(deps, { workspaceSlug, channelId });
+  }, [activeChannelId, activeDmId, auth, dispatch, isGallery, markedUnreadChannelId, state, workspaceSlug]);
 }

@@ -7,10 +7,10 @@ export const channelReadPositions = pgTable(
   {
     userId: text("user_id")
       .notNull()
-      .references(() => users.id),
+      .references(() => users.id, { onDelete: "cascade" }),
     channelId: uuid("channel_id")
       .notNull()
-      .references(() => channels.id),
+      .references(() => channels.id, { onDelete: "cascade" }),
     lastReadAt: timestamp("last_read_at").defaultNow().notNull(),
   },
   (t) => [primaryKey({ columns: [t.userId, t.channelId] })],

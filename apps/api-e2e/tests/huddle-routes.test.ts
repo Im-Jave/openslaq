@@ -1,0 +1,380 @@
+import { describe, test, expect, beforeEach, afterEach } from "bun:test";
+import { AccessToken } from "livekit-server-sdk";
+import { createHash } from "node:crypto";
+import { RoomManager } from "@openslaq/huddle/server";
+import { MAX_HUDDLE_PARTICIPANTS } from "@openslaq/huddle/shared";
+import { asUserId } from "@openslaq/shared";
+import type { Message } from "@openslaq/shared";
+import { addToWorkspace, createTestClient, createTestWorkspace, testId } from "./helpers/api-client";
+import { roomManager } from "../../api/src/huddle/routes";
+import { _resetForTests, getHuddleForChannel, joinHuddle } from "../../api/src/huddle/service";
+
+function getBaseUrl() {
+  return process.env.API_BASE_URL || "http://localhost:3001";
+}
+
+function webhookRoomName(channelId: string): string {
+  return RoomManager.roomNameForChannel(channelId);
+}
+
+async function signWebhookAuth(body: string): Promise<string> {
+  const token = new AccessToken("devkey", "devsecret");
+  token.sha256 = createHash("sha256").update(body).digest("base64");
+  return await token.toJwt();
+}
+
+describe("huddle routes", () => {
+  const originalListParticipants = roomManager.listParticipants.bind(roomManager);
+  const originalEnsureRoom = roomManager.ensureRoom.bind(roomManager);
+
+  beforeEach(() => {
+    _resetForTests();
+    roomManager.listParticipants = originalListParticipants;
+    roomManager.ensureRoom = originalEnsureRoom;
+  });
+
+  afterEach(() => {
+    roomManager.listParticipants = originalListParticipants;
+    roomManager.ensureRoom = originalEnsureRoom;
+  });
+
+  test("POST /api/huddle/join returns 403 for non-channel-member", async () => {
+    const owner = await createTestClient();
+    const outsider = await createTestClient({
+      id: `huddle-outsider-${testId()}`,
+      email: `huddle-outsider-${testId()}@openslaq.dev`,
+    });
+
+    const ws = await createTestWorkspace(owner.client);
+    const channelsRes = await owner.client.api.workspaces[":slug"].channels.$get({
+      param: { slug: ws.slug },
+    });
+    const channels = (await channelsRes.json()) as Array<{ id: string; name: string }>;
+    const general = channels.find((c) => c.name === "general");
+    expect(general).toBeDefined();
+
+    const joinRes = await fetch(`${getBaseUrl()}/api/huddle/join`, {
+      method: "POST",
+      headers: { ...outsider.headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ channelId: general!.id }),
+    });
+    expect(joinRes.status).toBe(403);
+  });
+
+  test("POST /api/huddle/join returns 409 when room is full", async () => {
+    const owner = await createTestClient({ id: `huddle-owner-${testId()}`, email: `huddle-owner-${testId()}@openslaq.dev` });
+    const ws = await createTestWorkspace(owner.client);
+    const channelsRes = await owner.client.api.workspaces[":slug"].channels.$get({
+      param: { slug: ws.slug },
+    });
+    const channels = (await channelsRes.json()) as Array<{ id: string; name: string }>;
+    const general = channels.find((c) => c.name === "general");
+    expect(general).toBeDefined();
+
+    roomManager.listParticipants = async () =>
+      Array.from({ length: MAX_HUDDLE_PARTICIPANTS }, (_, i) => ({ identity: `u-${i}` })) as any;
+    roomManager.ensureRoom = async () => {
+      throw new Error("ensureRoom should not run when room is full");
+    };
+
+    const joinRes = await fetch(`${getBaseUrl()}/api/huddle/join`, {
+      method: "POST",
+      headers: { ...owner.headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ channelId: general!.id }),
+    });
+    expect(joinRes.status).toBe(409);
+  });
+
+  test("POST /api/huddle/join returns token for channel member", async () => {
+    const owner = await createTestClient({ id: `huddle-join-${testId()}`, email: `huddle-join-${testId()}@openslaq.dev` });
+    const ws = await createTestWorkspace(owner.client);
+    const channelsRes = await owner.client.api.workspaces[":slug"].channels.$get({
+      param: { slug: ws.slug },
+    });
+    const channels = (await channelsRes.json()) as Array<{ id: string; name: string }>;
+    const general = channels.find((c) => c.name === "general");
+    expect(general).toBeDefined();
+
+    roomManager.listParticipants = async () => [];
+    roomManager.ensureRoom = async (channelId: string) => webhookRoomName(channelId);
+
+    const joinRes = await fetch(`${getBaseUrl()}/api/huddle/join`, {
+      method: "POST",
+      headers: { ...owner.headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ channelId: general!.id }),
+    });
+    expect(joinRes.status).toBe(200);
+
+    const body = (await joinRes.json()) as { token: string; wsUrl: string; roomName: string };
+    expect(body.token).toBeString();
+    expect(body.token.length).toBeGreaterThan(20);
+    expect(body.wsUrl).toContain("ws://");
+    expect(body.roomName).toBe(webhookRoomName(general!.id));
+    expect(getHuddleForChannel(general!.id)).not.toBeNull();
+  });
+
+  test("POST /api/huddle/webhook handles invalid signatures gracefully", async () => {
+    const res = await fetch(`${getBaseUrl()}/api/huddle/webhook`, {
+      method: "POST",
+      headers: {
+        Authorization: "invalid-token",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ event: "participant_joined" }),
+    });
+
+    expect(res.status).toBe(401);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe("Webhook verification failed");
+  });
+
+  test("POST /api/huddle/webhook participant_joined updates huddle state", async () => {
+    const channelId = `huddle-webhook-ch-${testId()}`;
+    const userId = `huddle-webhook-user-${testId()}`;
+    const payload = JSON.stringify({
+      event: "participant_joined",
+      room: { name: webhookRoomName(channelId) },
+      participant: { identity: userId },
+    });
+    const auth = await signWebhookAuth(payload);
+
+    const res = await fetch(`${getBaseUrl()}/api/huddle/webhook`, {
+      method: "POST",
+      headers: { Authorization: auth, "Content-Type": "application/json" },
+      body: payload,
+    });
+    expect(res.status).toBe(200);
+
+    const huddle = getHuddleForChannel(channelId);
+    expect(huddle).not.toBeNull();
+    expect(huddle!.participants.some((p) => p.userId === userId)).toBe(true);
+  });
+
+  test("POST /api/huddle/webhook participant_left emits update when others remain", async () => {
+    const channelId = `huddle-left-still-active-${testId()}`;
+    const userA = `huddle-left-a-${testId()}`;
+    const userB = `huddle-left-b-${testId()}`;
+    joinHuddle(channelId, userA);
+    joinHuddle(channelId, userB);
+
+    const payload = JSON.stringify({
+      event: "participant_left",
+      room: { name: webhookRoomName(channelId) },
+      participant: { identity: userB },
+    });
+    const auth = await signWebhookAuth(payload);
+    const res = await fetch(`${getBaseUrl()}/api/huddle/webhook`, {
+      method: "POST",
+      headers: { Authorization: auth, "Content-Type": "application/json" },
+      body: payload,
+    });
+    expect(res.status).toBe(200);
+
+    const huddle = getHuddleForChannel(channelId);
+    expect(huddle).not.toBeNull();
+    expect(huddle!.participants).toHaveLength(1);
+    expect(huddle!.participants[0]!.userId).toBe(asUserId(userA));
+  });
+
+  test("POST /api/huddle/webhook participant_left ends huddle when last user leaves", async () => {
+    const channelId = `huddle-left-end-${testId()}`;
+    const userId = `huddle-left-user-${testId()}`;
+    joinHuddle(channelId, userId);
+
+    const payload = JSON.stringify({
+      event: "participant_left",
+      room: { name: webhookRoomName(channelId) },
+      participant: { identity: userId },
+    });
+    const auth = await signWebhookAuth(payload);
+    const res = await fetch(`${getBaseUrl()}/api/huddle/webhook`, {
+      method: "POST",
+      headers: { Authorization: auth, "Content-Type": "application/json" },
+      body: payload,
+    });
+    expect(res.status).toBe(200);
+    expect(getHuddleForChannel(channelId)).toBeNull();
+  });
+
+  test("POST /api/huddle/webhook room_finished branch handles active huddle", async () => {
+    const channelId = `huddle-room-finished-${testId()}`;
+    joinHuddle(channelId, `huddle-room-finished-user-${testId()}`);
+
+    const payload = JSON.stringify({
+      event: "room_finished",
+      room: { name: webhookRoomName(channelId) },
+    });
+    const auth = await signWebhookAuth(payload);
+    const res = await fetch(`${getBaseUrl()}/api/huddle/webhook`, {
+      method: "POST",
+      headers: { Authorization: auth, "Content-Type": "application/json" },
+      body: payload,
+    });
+    expect(res.status).toBe(200);
+  });
+
+  test("POST /api/huddle/join succeeds for invited member", async () => {
+    const owner = await createTestClient({ id: `huddle-owner2-${testId()}`, email: `huddle-owner2-${testId()}@openslaq.dev` });
+    const member = await createTestClient({ id: `huddle-member-${testId()}`, email: `huddle-member-${testId()}@openslaq.dev` });
+    const ws = await createTestWorkspace(owner.client);
+    await addToWorkspace(owner.client, ws.slug, member.client);
+
+    const channelsRes = await owner.client.api.workspaces[":slug"].channels.$get({
+      param: { slug: ws.slug },
+    });
+    const channels = (await channelsRes.json()) as Array<{ id: string; name: string }>;
+    const general = channels.find((c) => c.name === "general");
+    expect(general).toBeDefined();
+
+    roomManager.listParticipants = async () => [];
+    roomManager.ensureRoom = async (channelId: string) => webhookRoomName(channelId);
+
+    const joinRes = await fetch(`${getBaseUrl()}/api/huddle/join`, {
+      method: "POST",
+      headers: { ...member.headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ channelId: general!.id }),
+    });
+    expect(joinRes.status).toBe(200);
+  });
+
+  test("first join creates a huddle system message", async () => {
+    const owner = await createTestClient({ id: `huddle-sysmsg-${testId()}`, email: `huddle-sysmsg-${testId()}@openslaq.dev` });
+    const ws = await createTestWorkspace(owner.client);
+    const channelsRes = await owner.client.api.workspaces[":slug"].channels.$get({
+      param: { slug: ws.slug },
+    });
+    const channels = (await channelsRes.json()) as Array<{ id: string; name: string }>;
+    const general = channels.find((c) => c.name === "general")!;
+
+    roomManager.listParticipants = async () => [];
+    roomManager.ensureRoom = async (channelId: string) => webhookRoomName(channelId);
+
+    // First join should create system message
+    const joinRes = await fetch(`${getBaseUrl()}/api/huddle/join`, {
+      method: "POST",
+      headers: { ...owner.headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ channelId: general.id }),
+    });
+    expect(joinRes.status).toBe(200);
+
+    // Verify system message exists in channel messages
+    const messagesRes = await owner.client.api.workspaces[":slug"].channels[":id"].messages.$get({
+      param: { slug: ws.slug, id: general.id },
+      query: {},
+    });
+    const messagesBody = (await messagesRes.json()) as { messages: Message[] };
+    const huddleMsg = messagesBody.messages.find((m) => m.type === "huddle");
+    expect(huddleMsg).toBeDefined();
+    expect(huddleMsg!.userId).toBe(asUserId(owner.user.id));
+    expect(huddleMsg!.content).toBe("");
+    expect(huddleMsg!.metadata).toBeDefined();
+    expect(huddleMsg!.metadata!.huddleStartedAt).toBeTruthy();
+    expect(huddleMsg!.metadata!.huddleEndedAt).toBeUndefined();
+
+    // Verify huddle state has messageId
+    const huddle = getHuddleForChannel(general.id);
+    expect(huddle).not.toBeNull();
+    expect(huddle!.messageId).toBe(huddleMsg!.id);
+  });
+
+  test("second join does NOT create another system message", async () => {
+    const owner = await createTestClient({ id: `huddle-sysmsg2-${testId()}`, email: `huddle-sysmsg2-${testId()}@openslaq.dev` });
+    const member = await createTestClient({ id: `huddle-sysmsg2-m-${testId()}`, email: `huddle-sysmsg2-m-${testId()}@openslaq.dev` });
+    const ws = await createTestWorkspace(owner.client);
+    await addToWorkspace(owner.client, ws.slug, member.client);
+    const channelsRes = await owner.client.api.workspaces[":slug"].channels.$get({
+      param: { slug: ws.slug },
+    });
+    const channels = (await channelsRes.json()) as Array<{ id: string; name: string }>;
+    const general = channels.find((c) => c.name === "general")!;
+
+    roomManager.listParticipants = async () => [];
+    roomManager.ensureRoom = async (channelId: string) => webhookRoomName(channelId);
+
+    // First join
+    await fetch(`${getBaseUrl()}/api/huddle/join`, {
+      method: "POST",
+      headers: { ...owner.headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ channelId: general.id }),
+    });
+
+    // Second join
+    await fetch(`${getBaseUrl()}/api/huddle/join`, {
+      method: "POST",
+      headers: { ...member.headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ channelId: general.id }),
+    });
+
+    // Should still only have one huddle system message
+    const messagesRes = await owner.client.api.workspaces[":slug"].channels[":id"].messages.$get({
+      param: { slug: ws.slug, id: general.id },
+      query: {},
+    });
+    const messagesBody = (await messagesRes.json()) as { messages: Message[] };
+    const huddleMsgs = messagesBody.messages.filter((m) => m.type === "huddle");
+    expect(huddleMsgs).toHaveLength(1);
+  });
+
+  test("huddle end updates system message with duration and participants", async () => {
+    const owner = await createTestClient({ id: `huddle-end-msg-${testId()}`, email: `huddle-end-msg-${testId()}@openslaq.dev` });
+    const member = await createTestClient({ id: `huddle-end-msg-m-${testId()}`, email: `huddle-end-msg-m-${testId()}@openslaq.dev` });
+    const ws = await createTestWorkspace(owner.client);
+    await addToWorkspace(owner.client, ws.slug, member.client);
+    const channelsRes = await owner.client.api.workspaces[":slug"].channels.$get({
+      param: { slug: ws.slug },
+    });
+    const channels = (await channelsRes.json()) as Array<{ id: string; name: string }>;
+    const general = channels.find((c) => c.name === "general")!;
+
+    roomManager.listParticipants = async () => [];
+    roomManager.ensureRoom = async (channelId: string) => webhookRoomName(channelId);
+
+    // Both join
+    await fetch(`${getBaseUrl()}/api/huddle/join`, {
+      method: "POST",
+      headers: { ...owner.headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ channelId: general.id }),
+    });
+    await fetch(`${getBaseUrl()}/api/huddle/join`, {
+      method: "POST",
+      headers: { ...member.headers, "Content-Type": "application/json" },
+      body: JSON.stringify({ channelId: general.id }),
+    });
+
+    // Both leave via webhook (last one ends huddle)
+    const payload1 = JSON.stringify({
+      event: "participant_left",
+      room: { name: webhookRoomName(general.id) },
+      participant: { identity: owner.user.id },
+    });
+    await fetch(`${getBaseUrl()}/api/huddle/webhook`, {
+      method: "POST",
+      headers: { Authorization: await signWebhookAuth(payload1), "Content-Type": "application/json" },
+      body: payload1,
+    });
+
+    const payload2 = JSON.stringify({
+      event: "participant_left",
+      room: { name: webhookRoomName(general.id) },
+      participant: { identity: member.user.id },
+    });
+    await fetch(`${getBaseUrl()}/api/huddle/webhook`, {
+      method: "POST",
+      headers: { Authorization: await signWebhookAuth(payload2), "Content-Type": "application/json" },
+      body: payload2,
+    });
+
+    // Verify system message was updated with end info
+    const messagesRes = await owner.client.api.workspaces[":slug"].channels[":id"].messages.$get({
+      param: { slug: ws.slug, id: general.id },
+      query: {},
+    });
+    const messagesBody = (await messagesRes.json()) as { messages: Message[] };
+    const huddleMsg = messagesBody.messages.find((m) => m.type === "huddle");
+    expect(huddleMsg).toBeDefined();
+    expect(huddleMsg!.metadata!.huddleEndedAt).toBeTruthy();
+    expect(huddleMsg!.metadata!.duration).toBeGreaterThanOrEqual(0);
+    expect(huddleMsg!.metadata!.finalParticipants).toBeDefined();
+    expect(huddleMsg!.metadata!.finalParticipants!.length).toBeGreaterThanOrEqual(1);
+  });
+});

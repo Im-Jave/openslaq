@@ -83,7 +83,42 @@ async function mockNotificationSpy(page: import("@playwright/test").Page) {
   });
 }
 
+/** Inject a Notification class with permission = "denied" so the denied branch is exercised. */
+async function mockNotificationDenied(page: import("@playwright/test").Page) {
+  await page.evaluate(() => {
+    (window as any).Notification = class {
+      static permission: NotificationPermission = "denied";
+      static async requestPermission(): Promise<NotificationPermission> {
+        return "denied";
+      }
+      title: string;
+      body?: string;
+      onclick: (() => void) | null = null;
+      constructor(title: string, options?: { body?: string }) {
+        this.title = title;
+        this.body = options?.body;
+      }
+      close() {}
+    };
+  });
+}
+
 sharedTest.describe("Notification settings", () => {
+  sharedTest("shows warning when notifications are blocked", async ({
+    page,
+    testWorkspace,
+  }) => {
+    await setupMockAuth(page);
+    await page.goto(`/w/${testWorkspace.slug}`);
+    await expect(page.getByText("# general")).toBeVisible();
+    await mockNotificationDenied(page);
+    await openSettingsDialog(page);
+
+    await expect(
+      page.getByText("Notifications are blocked in your browser settings"),
+    ).toBeVisible();
+  });
+
   sharedTest("shows notification toggles in settings dialog", async ({
     page,
     testWorkspace,
@@ -171,8 +206,8 @@ test.describe("Notification delivery", () => {
 
     // Enable notifications in localStorage before loading
     await page.addInitScript(() => {
-      localStorage.setItem("openslack-notifications-enabled", "true");
-      localStorage.setItem("openslack-notifications-sound", "true");
+      localStorage.setItem("openslaq-notifications-enabled", "true");
+      localStorage.setItem("openslaq-notifications-sound", "true");
     });
 
     await page.goto(`/w/${testWorkspace.slug}`);
@@ -206,8 +241,8 @@ test.describe("Notification delivery", () => {
     await setupMockAuth(page);
 
     await page.addInitScript(() => {
-      localStorage.setItem("openslack-notifications-enabled", "true");
-      localStorage.setItem("openslack-notifications-sound", "true");
+      localStorage.setItem("openslaq-notifications-enabled", "true");
+      localStorage.setItem("openslaq-notifications-sound", "true");
     });
 
     await page.goto(`/w/${testWorkspace.slug}`);

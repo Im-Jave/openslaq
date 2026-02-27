@@ -1,4 +1,4 @@
-import type { UserId } from "@openslack/shared";
+import type { UserId } from "@openslaq/shared";
 
 export interface AuthUser {
   id: UserId;

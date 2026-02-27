@@ -1,13 +1,13 @@
 import type { Server } from "socket.io";
 import * as jose from "jose";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import type {
   ClientToServerEvents,
   ServerToClientEvents,
   SocketData,
-} from "@openslack/shared";
-import { asUserId, asChannelId } from "@openslack/shared";
+} from "@openslaq/shared";
+import { asUserId, asChannelId } from "@openslaq/shared";
 import { jwks, jwtVerifyOptions, e2eTestSecret } from "../auth/jwt";
 import { db } from "../db";
 import { channelMembers } from "../channels/schema";
@@ -20,20 +20,48 @@ import {
   getOnlineUserIds,
   persistLastSeen,
   getUserWorkspaceIds,
-  getSocketIdsForUser,
 } from "../presence/service";
+import { isStatusExpired } from "../users/service";
 import {
-  startHuddle,
-  joinHuddle,
-  leaveHuddle,
-  setMuted,
   getActiveHuddlesForChannels,
   removeUserFromAllHuddles,
 } from "../huddle/service";
+import { updateHuddleMessage } from "../messages/service";
+import type { HuddleMessageMetadata } from "@openslaq/shared";
+import { webhookDispatcher } from "../bots/webhook-dispatcher";
 
 const socketJwtSchema = z.object({ sub: z.string() });
 
 const typingTimestamps = new Map<string, number>();
+
+export async function getPresenceSnapshotForWorkspaces(workspaceIds: string[]) {
+  if (workspaceIds.length === 0) return [];
+
+  const rows = await db
+    .select({
+      userId: workspaceMembers.userId,
+      lastSeenAt: users.lastSeenAt,
+      statusEmoji: users.statusEmoji,
+      statusText: users.statusText,
+      statusExpiresAt: users.statusExpiresAt,
+    })
+    .from(workspaceMembers)
+    .innerJoin(users, eq(workspaceMembers.userId, users.id))
+    .where(inArray(workspaceMembers.workspaceId, workspaceIds));
+
+  // A user can appear in multiple workspaces; presence sync payload should include each user once.
+  const byUserId = new Map<string, {
+    userId: string;
+    lastSeenAt: Date | null;
+    statusEmoji: string | null;
+    statusText: string | null;
+    statusExpiresAt: Date | null;
+  }>();
+  for (const row of rows) {
+    byUserId.set(row.userId, row);
+  }
+  return [...byUserId.values()];
+}
 
 export function setupSocketHandlers(
   io: Server<
@@ -102,30 +130,30 @@ export function setupSocketHandlers(
             status: "online",
             lastSeenAt: null,
           });
+          webhookDispatcher.dispatch({
+            type: "presence:updated",
+            workspaceId: wsId,
+            data: { userId, status: "online", lastSeenAt: null },
+          });
         }
       }
 
       // Send presence snapshot to connecting client
-      const workspaceMemberRows = await db
-        .select({
-          userId: workspaceMembers.userId,
-          lastSeenAt: users.lastSeenAt,
-        })
-        .from(workspaceMembers)
-        .innerJoin(users, eq(workspaceMembers.userId, users.id))
-        .where(
-          workspaceIds.length > 0
-            ? eq(workspaceMembers.workspaceId, workspaceIds[0]!)
-            : eq(workspaceMembers.workspaceId, ""),
-        );
+      const workspaceMemberRows = await getPresenceSnapshotForWorkspaces(workspaceIds);
 
       const onlineIds = getOnlineUserIds();
       socket.emit("presence:sync", {
-        users: workspaceMemberRows.map((m) => ({
-          userId: m.userId,
-          status: (onlineIds.has(m.userId) ? "online" : "offline") as "online" | "offline",
-          lastSeenAt: m.lastSeenAt?.toISOString() ?? null,
-        })),
+        users: workspaceMemberRows.map((m) => {
+          const expired = isStatusExpired(m.statusExpiresAt);
+          return {
+            userId: m.userId,
+            status: (onlineIds.has(m.userId) ? "online" : "offline") as "online" | "offline",
+            lastSeenAt: m.lastSeenAt?.toISOString() ?? null,
+            statusEmoji: expired ? null : (m.statusEmoji ?? null),
+            statusText: expired ? null : (m.statusText ?? null),
+            statusExpiresAt: expired ? null : (m.statusExpiresAt?.toISOString() ?? null),
+          };
+        }),
       });
 
       // Send active huddles for user's channels
@@ -166,64 +194,6 @@ export function setupSocketHandlers(
       });
     });
 
-    socket.on("huddle:start", async ({ channelId }) => {
-      const isMember = await isChannelMember(asChannelId(channelId), userId);
-      if (!isMember) return;
-      const huddle = startHuddle(channelId, userId);
-      io.to(`channel:${channelId}`).emit("huddle:started", huddle);
-    });
-
-    socket.on("huddle:join", async ({ channelId }) => {
-      const isMember = await isChannelMember(asChannelId(channelId), userId);
-      if (!isMember) return;
-      const huddle = joinHuddle(channelId, userId);
-      io.to(`channel:${channelId}`).emit("huddle:updated", huddle);
-    });
-
-    socket.on("huddle:leave", () => {
-      const result = leaveHuddle(userId);
-      if (result.channelId) {
-        if (result.ended) {
-          io.to(`channel:${result.channelId}`).emit("huddle:ended", {
-            channelId: result.channelId,
-          });
-        } else if (result.huddle) {
-          io.to(`channel:${result.channelId}`).emit("huddle:updated", result.huddle);
-        }
-      }
-    });
-
-    socket.on("huddle:mute", ({ isMuted }) => {
-      const huddle = setMuted(userId, isMuted);
-      if (huddle) {
-        io.to(`channel:${huddle.channelId}`).emit("huddle:updated", huddle);
-      }
-    });
-
-    socket.on("webrtc:offer", (payload) => {
-      const targetSockets = getSocketIdsForUser(payload.toUserId);
-      const offer = { ...payload, fromUserId: userId };
-      for (const sid of targetSockets) {
-        io.to(sid).emit("webrtc:offer", offer);
-      }
-    });
-
-    socket.on("webrtc:answer", (payload) => {
-      const targetSockets = getSocketIdsForUser(payload.toUserId);
-      const answer = { ...payload, fromUserId: userId };
-      for (const sid of targetSockets) {
-        io.to(sid).emit("webrtc:answer", answer);
-      }
-    });
-
-    socket.on("webrtc:ice-candidate", (payload) => {
-      const targetSockets = getSocketIdsForUser(payload.toUserId);
-      const candidate = { ...payload, fromUserId: userId };
-      for (const sid of targetSockets) {
-        io.to(sid).emit("webrtc:ice-candidate", candidate);
-      }
-    });
-
     socket.on("disconnect", async () => {
       console.log(`Socket disconnected: ${userId}`);
       const wentOffline = removeSocket(userId, socket.id);
@@ -233,6 +203,25 @@ export function setupSocketHandlers(
         const huddleResult = removeUserFromAllHuddles(userId);
         if (huddleResult.channelId) {
           if (huddleResult.ended) {
+            // Update the huddle system message with end metadata
+            if (huddleResult.messageId && huddleResult.startedAt) {
+              try {
+                const endedAt = new Date().toISOString();
+                const duration = Math.round((new Date(endedAt).getTime() - new Date(huddleResult.startedAt).getTime()) / 1000);
+                const metadata: HuddleMessageMetadata = {
+                  huddleStartedAt: huddleResult.startedAt,
+                  huddleEndedAt: endedAt,
+                  duration,
+                  finalParticipants: huddleResult.participantHistory,
+                };
+                const updated = await updateHuddleMessage(huddleResult.messageId, metadata);
+                if (updated) {
+                  io.to(`channel:${huddleResult.channelId}`).emit("message:updated", updated);
+                }
+              } catch (err) {
+                console.error("Failed to update huddle system message on disconnect:", err);
+              }
+            }
             io.to(`channel:${huddleResult.channelId}`).emit("huddle:ended", {
               channelId: huddleResult.channelId,
             });
@@ -251,6 +240,11 @@ export function setupSocketHandlers(
             userId,
             status: "offline",
             lastSeenAt: now,
+          });
+          webhookDispatcher.dispatch({
+            type: "presence:updated",
+            workspaceId: wsId,
+            data: { userId, status: "offline", lastSeenAt: now },
           });
         }
       }

@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { Attachment } from "@openslack/shared";
+import type { Attachment } from "@openslaq/shared";
 
 interface PendingFile {
   id: string;

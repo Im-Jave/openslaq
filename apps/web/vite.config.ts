@@ -19,5 +19,11 @@ export default defineConfig({
   },
   server: {
     port: 3000,
+    strictPort: true,
+  },
+  build: {
+    rollupOptions: {
+      external: [/^@tauri-apps\//],
+    },
   },
 });

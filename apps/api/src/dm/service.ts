@@ -1,18 +1,20 @@
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { db } from "../db";
 import { channels, channelMembers } from "../channels/schema";
 import { users } from "../users/schema";
 import { workspaceMembers } from "../workspaces/schema";
-import type { Channel, WorkspaceId, UserId } from "@openslack/shared";
-import { asChannelId, asWorkspaceId, asUserId, CHANNEL_TYPES } from "@openslack/shared";
+import type { Channel, WorkspaceId, UserId } from "@openslaq/shared";
+import { asChannelId, asWorkspaceId, asUserId, CHANNEL_TYPES } from "@openslaq/shared";
 
 function toChannel(row: typeof channels.$inferSelect): Channel {
   return {
     id: asChannelId(row.id),
     workspaceId: asWorkspaceId(row.workspaceId),
     name: row.name,
-    type: row.type as Channel["type"],
+    type: row.type,
     description: row.description,
+    displayName: row.displayName ?? null,
+    isArchived: row.isArchived,
     createdBy: row.createdBy ? asUserId(row.createdBy) : null,
     createdAt: row.createdAt.toISOString(),
   };
@@ -98,7 +100,20 @@ export async function getOrCreateDm(
 }
 
 export async function listDms(workspaceId: WorkspaceId, userId: UserId): Promise<DmListItem[]> {
-  // Find all DM channels the user is a member of in this workspace
+  // Subquery: DM channel IDs where this user is a member
+  const userDmChannelIds = db
+    .select({ channelId: channelMembers.channelId })
+    .from(channelMembers)
+    .innerJoin(channels, eq(channels.id, channelMembers.channelId))
+    .where(
+      and(
+        eq(channelMembers.userId, userId),
+        eq(channels.workspaceId, workspaceId),
+        eq(channels.type, CHANNEL_TYPES.DM),
+      ),
+    );
+
+  // Fetch those channels and all their members in one query
   const rows = await db
     .select({
       channel: channels,
@@ -106,14 +121,9 @@ export async function listDms(workspaceId: WorkspaceId, userId: UserId): Promise
     })
     .from(channels)
     .innerJoin(channelMembers, eq(channels.id, channelMembers.channelId))
-    .where(
-      and(
-        eq(channels.workspaceId, workspaceId),
-        eq(channels.type, CHANNEL_TYPES.DM),
-      ),
-    );
+    .where(inArray(channels.id, userDmChannelIds));
 
-  // Group by channel, find ones this user is in
+  // Group by channel
   const channelMap = new Map<
     string,
     { channel: typeof rows[0]["channel"]; memberIds: string[] }
@@ -133,8 +143,6 @@ export async function listDms(workspaceId: WorkspaceId, userId: UserId): Promise
   const results: DmListItem[] = [];
 
   for (const { channel, memberIds } of channelMap.values()) {
-    if (!memberIds.includes(userId)) continue;
-
     // The "other" user is the one that isn't the current user.
     // For self-DMs, otherUser is the current user.
     const otherUserId =

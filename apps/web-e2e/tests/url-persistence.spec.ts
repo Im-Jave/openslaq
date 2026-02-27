@@ -1,5 +1,5 @@
 import { expect } from "@playwright/test";
-import { test } from "./helpers/test-workspace";
+import { sharedTest as test } from "./helpers/test-workspace";
 import { setupMockAuth } from "./helpers/mock-auth";
 
 test.describe("URL Persistence", () => {

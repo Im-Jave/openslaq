@@ -5,6 +5,7 @@ export {
   rlFileUpload,
   rlChannelCreate,
   rlWorkspaceCreate,
+  rlPin,
   rlReaction,
   rlChannelJoinLeave,
   rlMarkAsRead,
@@ -14,4 +15,6 @@ export {
   rlRead,
   rlInviteAccept,
   rlInvitePreview,
+  rlBotSend,
+  rlBotRead,
 } from "./tiers";

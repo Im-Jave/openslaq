@@ -1,10 +1,10 @@
 import { OpenAPIHono, createRoute } from "@hono/zod-openapi";
-import type { WorkspaceId, UserId } from "@openslack/shared";
 import { searchQuerySchema } from "./validation";
 import { searchMessages } from "./service";
 import type { WorkspaceMemberEnv } from "../workspaces/role-middleware";
 import { rlRead } from "../rate-limit";
 import { searchResultsSchema } from "../openapi/schemas";
+import { jsonResponse } from "../openapi/responses";
 
 const searchRoute = createRoute({
   method: "get",
@@ -30,11 +30,11 @@ const app = new OpenAPIHono<WorkspaceMemberEnv>().openapi(searchRoute, async (c)
   const user = c.get("user");
   const params = c.req.valid("query");
   const result = await searchMessages(
-    workspace.id as WorkspaceId,
-    user.id as UserId,
+    workspace.id,
+    user.id,
     params,
   );
-  return c.json(result as any, 200);
+  return jsonResponse(c, result, 200);
 });
 
 export default app;

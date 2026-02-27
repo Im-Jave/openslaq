@@ -4,12 +4,13 @@ import type {
   ClientToServerEvents,
   ServerToClientEvents,
   SocketData,
-} from "@openslack/shared";
+} from "@openslaq/shared";
 import app from "./app";
 import { setupSocketHandlers } from "./socket";
 import { setIO } from "./socket/io";
 import { env } from "./env";
 import { startCleanup } from "./rate-limit";
+import { closeOrphanedHuddleMessages } from "./messages/service";
 
 // Use Node.js HTTP server for Socket.IO compatibility
 const httpServer = createAdaptorServer(app);
@@ -21,7 +22,16 @@ const io = new Server<
   SocketData
 >(httpServer, {
   cors: {
-    origin: env.CORS_ORIGIN,
+    origin: (
+      origin: string | undefined,
+      callback: (err: Error | null, origin?: boolean) => void,
+    ) => {
+      if (!origin || env.CORS_ORIGIN.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
   },
 });
@@ -33,4 +43,9 @@ const port = env.PORT ?? env.API_PORT;
 httpServer.listen(port, () => {
   console.log(`API server running on http://localhost:${port}`);
   startCleanup();
+  closeOrphanedHuddleMessages()
+    .then((count) => {
+      if (count > 0) console.log(`Closed ${count} orphaned huddle message(s)`);
+    })
+    .catch((err) => console.error("Failed to close orphaned huddle messages:", err));
 });

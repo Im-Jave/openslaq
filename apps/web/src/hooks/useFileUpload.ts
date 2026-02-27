@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
-import type { Attachment } from "@openslack/shared";
-import { asAttachmentId, asUserId } from "@openslack/shared";
+import type { Attachment } from "@openslaq/shared";
+import { asAttachmentId, asUserId } from "@openslaq/shared";
 import { env } from "../env";
 import { requireAccessToken } from "../lib/auth";
 import { useGalleryMode } from "../gallery/gallery-context";
@@ -59,12 +59,12 @@ export function useFileUpload(): UseFileUploadReturn {
           const attachments: Attachment[] = pendingFiles.map(({ file }) => ({
             id: asAttachmentId(`demo-attachment-${crypto.randomUUID()}`),
             messageId: null,
-            storageKey: `demo://${file.name}`,
             filename: file.name,
             mimeType: file.type || "application/octet-stream",
             size: file.size,
             uploadedBy: asUserId("user-you"),
             createdAt: new Date().toISOString(),
+            downloadUrl: URL.createObjectURL(file),
           }));
           const all = [...uploadedAttachments, ...attachments];
           setUploadedAttachments(all);

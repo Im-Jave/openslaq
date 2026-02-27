@@ -1,10 +1,16 @@
 import { useCallback } from "react";
-import type { Attachment, Message, ReactionGroup } from "@openslack/shared";
-import { asChannelId, asMessageId, asUserId } from "@openslack/shared";
+import { useParams } from "react-router-dom";
+import type { Attachment, Message, ReactionGroup } from "@openslaq/shared";
+import { asChannelId, asMessageId, asUserId } from "@openslaq/shared";
+import {
+  toggleReaction as coreToggleReaction,
+  sendMessage as coreSendMessage,
+  editMessage as coreEditMessage,
+  deleteMessage as coreDeleteMessage,
+  markChannelAsUnread as coreMarkChannelAsUnread,
+} from "@openslaq/client-core";
 import { api } from "../../api";
-import { authorizedRequest } from "../../lib/api-client";
-import { redirectToAuth } from "../../lib/auth";
-import { AuthError, getErrorMessage } from "../../lib/errors";
+import { useAuthProvider } from "../../lib/api-client";
 import { useChatStore } from "../../state/chat-store";
 import { useGalleryMode } from "../../gallery/gallery-context";
 
@@ -25,70 +31,52 @@ interface SendMessageInput {
 export function useMessageMutations(user: AuthJsonUser | null | undefined) {
   const { state, dispatch } = useChatStore();
   const isGallery = useGalleryMode();
+  const auth = useAuthProvider();
+  const { workspaceSlug } = useParams<{ workspaceSlug: string }>();
 
   const toggleReaction = useCallback(
     async (messageId: string, emoji: string) => {
       if (!user) return;
 
-      const existing = state.messagesById[messageId];
-      const previousReactions: ReactionGroup[] = existing?.reactions ?? [];
-
-      if (existing) {
-        const currentUserId = asUserId(user.id);
-        const current = previousReactions.find((group) => group.emoji === emoji);
-        let nextReactions: ReactionGroup[];
-
-        if (!current) {
-          nextReactions = [...previousReactions, { emoji, count: 1, userIds: [currentUserId] }];
-        } else {
-          const hasReacted = current.userIds.includes(currentUserId);
-          if (hasReacted) {
-            const nextUserIds = current.userIds.filter((id) => id !== currentUserId);
-            nextReactions =
-              nextUserIds.length === 0
-                ? previousReactions.filter((group) => group.emoji !== emoji)
-                : previousReactions.map((group) =>
-                    group.emoji === emoji
-                      ? { ...group, userIds: nextUserIds, count: Math.max(0, group.count - 1) }
-                      : group,
-                  );
-          } else {
-            nextReactions = previousReactions.map((group) =>
-              group.emoji === emoji
-                ? { ...group, userIds: [...group.userIds, currentUserId], count: group.count + 1 }
-                : group,
-            );
-          }
-        }
-
-        dispatch({ type: "messages/updateReactions", messageId, reactions: nextReactions });
-      }
-
+      // Gallery: apply optimistic update locally but skip API call
       if (isGallery) {
+        const existing = state.messagesById[messageId];
+        if (existing) {
+          const currentUserId = asUserId(user.id);
+          const previousReactions: ReactionGroup[] = existing.reactions ?? [];
+          const current = previousReactions.find((group) => group.emoji === emoji);
+          let nextReactions: ReactionGroup[];
+
+          if (!current) {
+            nextReactions = [...previousReactions, { emoji, count: 1, userIds: [currentUserId] }];
+          } else {
+            const hasReacted = current.userIds.includes(currentUserId);
+            if (hasReacted) {
+              const nextUserIds = current.userIds.filter((id) => id !== currentUserId);
+              nextReactions =
+                nextUserIds.length === 0
+                  ? previousReactions.filter((group) => group.emoji !== emoji)
+                  : previousReactions.map((group) =>
+                      group.emoji === emoji
+                        ? { ...group, userIds: nextUserIds, count: Math.max(0, group.count - 1) }
+                        : group,
+                    );
+            } else {
+              nextReactions = previousReactions.map((group) =>
+                group.emoji === emoji
+                  ? { ...group, userIds: [...group.userIds, currentUserId], count: group.count + 1 }
+                  : group,
+              );
+            }
+          }
+          dispatch({ type: "messages/updateReactions", messageId, reactions: nextReactions });
+        }
         return;
       }
 
-      try {
-        dispatch({ type: "mutations/error", error: null });
-        await authorizedRequest(user, (headers) =>
-          api.api.messages[":id"].reactions.$post(
-            { param: { id: messageId }, json: { emoji } },
-            { headers },
-          ),
-        );
-      } catch (err) {
-        if (err instanceof AuthError) {
-          redirectToAuth();
-          return;
-        }
-
-        if (existing) {
-          dispatch({ type: "messages/updateReactions", messageId, reactions: previousReactions });
-        }
-        dispatch({ type: "mutations/error", error: getErrorMessage(err, "Failed to update reaction") });
-      }
+      await coreToggleReaction({ api, auth, dispatch, getState: () => state }, { messageId, emoji, userId: user.id });
     },
-    [dispatch, isGallery, state.messagesById, user],
+    [auth, dispatch, isGallery, state, user],
   );
 
   const sendMessage = useCallback(
@@ -118,6 +106,7 @@ export function useMessageMutations(user: AuthJsonUser | null | undefined) {
           latestReplyAt: null,
           attachments,
           reactions: [],
+          mentions: [],
           createdAt: timestamp,
           updatedAt: timestamp,
         };
@@ -138,53 +127,27 @@ export function useMessageMutations(user: AuthJsonUser | null | undefined) {
         // Showcase reactions after sending: spaced-out lightweight bot feedback.
         let stagedReactions: ReactionGroup[] = [];
         window.setTimeout(() => {
-          stagedReactions = [...stagedReactions, { emoji: "👍", count: 1, userIds: [asUserId("user-alice")] }];
+          stagedReactions = [...stagedReactions, { emoji: "\u{1F44D}", count: 1, userIds: [asUserId("user-alice")] }];
           dispatch({ type: "messages/updateReactions", messageId: nextMessage.id, reactions: stagedReactions });
         }, 1500);
 
         window.setTimeout(() => {
-          stagedReactions = [...stagedReactions, { emoji: "🚀", count: 1, userIds: [asUserId("user-bob")] }];
+          stagedReactions = [...stagedReactions, { emoji: "\u{1F680}", count: 1, userIds: [asUserId("user-bob")] }];
           dispatch({ type: "messages/updateReactions", messageId: nextMessage.id, reactions: stagedReactions });
         }, 3200);
 
         return true;
       }
 
-      try {
-        dispatch({ type: "mutations/error", error: null });
-        if (parentMessageId) {
-          await authorizedRequest(user, (headers) =>
-            api.api.workspaces[":slug"].channels[":id"].messages[":messageId"].replies.$post(
-              {
-                param: { slug: workspaceSlug, id: channelId, messageId: parentMessageId },
-                json: { content, attachmentIds },
-              },
-              { headers },
-            ),
-          );
-        } else {
-          await authorizedRequest(user, (headers) =>
-            api.api.workspaces[":slug"].channels[":id"].messages.$post(
-              {
-                param: { slug: workspaceSlug, id: channelId },
-                json: { content, attachmentIds },
-              },
-              { headers },
-            ),
-          );
-        }
-        return true;
-      } catch (err) {
-        if (err instanceof AuthError) {
-          redirectToAuth();
-          return false;
-        }
-
-        dispatch({ type: "mutations/error", error: getErrorMessage(err, "Failed to send message") });
-        return false;
-      }
+      return coreSendMessage({ api, auth, dispatch, getState: () => state }, {
+        channelId,
+        workspaceSlug,
+        content,
+        attachmentIds,
+        parentMessageId: parentMessageId ?? undefined,
+      });
     },
-    [dispatch, isGallery, state.messagesById, user],
+    [auth, dispatch, isGallery, state, user],
   );
 
   const editMessage = useCallback(
@@ -199,55 +162,39 @@ export function useMessageMutations(user: AuthJsonUser | null | undefined) {
         return;
       }
 
-      try {
-        dispatch({ type: "mutations/error", error: null });
-        await authorizedRequest(user, (headers) =>
-          api.api.messages[":id"].$put(
-            { param: { id: messageId }, json: { content } },
-            { headers },
-          ),
-        );
-      } catch (err) {
-        if (err instanceof AuthError) {
-          redirectToAuth();
-          return;
-        }
-        dispatch({ type: "mutations/error", error: getErrorMessage(err, "Failed to edit message") });
-      }
+      await coreEditMessage({ api, auth, dispatch, getState: () => state }, { messageId, content });
     },
-    [dispatch, isGallery, state.messagesById, user],
+    [auth, dispatch, isGallery, state, user],
   );
 
   const deleteMessage = useCallback(
     async (messageId: string) => {
       if (!user) return;
 
-      const existing = state.messagesById[messageId];
-
       if (isGallery) {
+        const existing = state.messagesById[messageId];
         if (existing) {
           dispatch({ type: "messages/delete", messageId, channelId: existing.channelId });
         }
         return;
       }
 
-      try {
-        dispatch({ type: "mutations/error", error: null });
-        await authorizedRequest(user, (headers) =>
-          api.api.messages[":id"].$delete(
-            { param: { id: messageId } },
-            { headers },
-          ),
-        );
-      } catch (err) {
-        if (err instanceof AuthError) {
-          redirectToAuth();
-          return;
-        }
-        dispatch({ type: "mutations/error", error: getErrorMessage(err, "Failed to delete message") });
-      }
+      await coreDeleteMessage({ api, auth, dispatch, getState: () => state }, { messageId });
     },
-    [dispatch, isGallery, state.messagesById, user],
+    [auth, dispatch, isGallery, state, user],
+  );
+
+  const markAsUnread = useCallback(
+    async (messageId: string) => {
+      if (!user || isGallery || !workspaceSlug) return;
+      const message = state.messagesById[messageId];
+      if (!message) return;
+      await coreMarkChannelAsUnread(
+        { api, auth, dispatch, getState: () => state },
+        { workspaceSlug, channelId: message.channelId, messageId },
+      );
+    },
+    [auth, dispatch, isGallery, state, user, workspaceSlug],
   );
 
   return {
@@ -255,5 +202,6 @@ export function useMessageMutations(user: AuthJsonUser | null | undefined) {
     sendMessage,
     editMessage,
     deleteMessage,
+    markAsUnread,
   };
 }

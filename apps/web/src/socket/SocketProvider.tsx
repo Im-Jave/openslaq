@@ -1,13 +1,12 @@
 import type { ReactNode } from "react";
 import { createContext, useEffect, useMemo, useRef, useState } from "react";
 import { useUser } from "@stackframe/react";
-import type { ChannelId } from "@openslack/shared";
+import type { ChannelId } from "@openslaq/shared";
 import {
   SocketManager,
   type SocketSnapshot,
-  type SocketStatus,
-  type TypedSocket,
-} from "./socketManager";
+} from "@openslaq/client-core";
+import { env } from "../env";
 
 export interface SocketContextValue extends SocketSnapshot {
   joinChannel: (channelId: ChannelId) => void;
@@ -34,7 +33,7 @@ export function SocketProvider({ children }: SocketProviderProps) {
   const user = useUser();
   const managerRef = useRef<SocketManager | null>(null);
   if (!managerRef.current) {
-    managerRef.current = new SocketManager();
+    managerRef.current = new SocketManager({ apiUrl: env.VITE_API_URL });
   }
   const manager = managerRef.current;
 
@@ -63,8 +62,8 @@ export function SocketProvider({ children }: SocketProviderProps) {
 
   const contextValue = useMemo(
     () => ({
-      socket: snapshot.socket as TypedSocket | null,
-      status: snapshot.status as SocketStatus,
+      socket: snapshot.socket,
+      status: snapshot.status,
       lastError: snapshot.lastError,
       joinChannel: (channelId: ChannelId) => manager.joinChannel(channelId),
       leaveChannel: (channelId: ChannelId) => manager.leaveChannel(channelId),

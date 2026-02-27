@@ -30,7 +30,7 @@ test.describe("Channel Members", () => {
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("heading", { name: "Channel Members" })).toBeVisible();
     await expect(dialog.getByText("Test User")).toBeVisible();
-    await expect(dialog.getByText("test@openslack.dev")).toBeVisible();
+    await expect(dialog.getByText("test@openslaq.dev")).toBeVisible();
   });
 
   test("search filters members", async ({ page, testWorkspace }) => {

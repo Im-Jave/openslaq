@@ -46,7 +46,7 @@ export default async function globalSetup() {
   }
 
   // Disable rate limiting so e2e tests aren't throttled
-  const secret = "openslack-e2e-test-secret-do-not-use-in-prod";
+  const secret = "openslaq-e2e-test-secret-do-not-use-in-prod";
   await fetch("http://localhost:3001/api/test/disable-rate-limits", {
     method: "POST",
     headers: { Authorization: `Bearer ${secret}` },

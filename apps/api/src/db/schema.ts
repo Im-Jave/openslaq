@@ -6,3 +6,8 @@ export * from "../messages/schema";
 export * from "../uploads/schema";
 export * from "../reactions/schema";
 export * from "../channels/read-positions-schema";
+export * from "../channels/starred-schema";
+export * from "../bots/schema";
+export * from "../messages/pinned-schema";
+export * from "../channels/notification-prefs-schema";
+export * from "../messages/link-preview-schema";

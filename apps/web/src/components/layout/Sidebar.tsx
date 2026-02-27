@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGalleryMode } from "../../gallery/gallery-context";
 import { ChannelList } from "../channel/ChannelList";
+import { StarredList } from "../channel/StarredList";
 import { CreateChannelDialog } from "../channel/CreateChannelDialog";
 import { DmList } from "../dm/DmList";
 import { NewDmDialog } from "../dm/NewDmDialog";
@@ -15,8 +16,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "../ui/dropdown-menu";
-import type { Channel, HuddleState } from "@openslack/shared";
-import { HuddleBar } from "../huddle/HuddleBar";
+import type { Channel, HuddleState, ChannelNotifyLevel } from "@openslaq/shared";
 
 interface WorkspaceInfo {
   id: string;
@@ -28,6 +28,11 @@ interface WorkspaceInfo {
 interface DmConversation {
   channel: { id: string };
   otherUser: { id: string; displayName: string; avatarUrl: string | null };
+}
+
+interface GroupDmConversation {
+  channel: { id: string; displayName: string | null };
+  members: { id: string; displayName: string; avatarUrl: string | null }[];
 }
 
 interface PresenceEntry {
@@ -42,6 +47,10 @@ interface SidebarProps {
   activeDmId: string | null;
   onSelectDm: (channelId: string) => void;
   dms: DmConversation[];
+  groupDms: GroupDmConversation[];
+  activeGroupDmId: string | null;
+  onSelectGroupDm: (channelId: string) => void;
+  onStartGroupDm: (memberIds: string[]) => void;
   currentUserId: string;
   onStartDm: (userId: string) => void;
   workspaceSlug: string;
@@ -51,17 +60,17 @@ interface SidebarProps {
   onOpenSearch?: () => void;
   onChannelCreated?: (channel: Channel) => void;
   activeHuddles?: Record<string, HuddleState>;
-  currentHuddleChannelId?: string | null;
-  isMuted?: boolean;
-  onToggleMute?: () => void;
-  onLeaveHuddle?: () => void;
-  onSwitchDevice?: (deviceId: string) => void;
+  starredChannelIds?: string[];
+  channelNotificationPrefs?: Record<string, ChannelNotifyLevel>;
+  onSetNotificationLevel?: (channelId: string, level: ChannelNotifyLevel) => void;
+  activeView?: "channel" | "unreads";
+  onSelectUnreadsView?: () => void;
   style?: React.CSSProperties;
 }
 
 function loadCollapseState(): { channels: boolean; dms: boolean } {
   try {
-    const stored = localStorage.getItem("openslack-sidebar-collapse");
+    const stored = localStorage.getItem("openslaq-sidebar-collapse");
     if (stored) return JSON.parse(stored) as { channels: boolean; dms: boolean };
   } catch {
     // ignore
@@ -76,6 +85,10 @@ export function Sidebar({
   activeDmId,
   onSelectDm,
   dms,
+  groupDms,
+  activeGroupDmId,
+  onSelectGroupDm,
+  onStartGroupDm,
   currentUserId,
   onStartDm,
   workspaceSlug,
@@ -85,11 +98,11 @@ export function Sidebar({
   onOpenSearch,
   onChannelCreated,
   activeHuddles,
-  currentHuddleChannelId,
-  isMuted,
-  onToggleMute,
-  onLeaveHuddle,
-  onSwitchDevice,
+  starredChannelIds,
+  channelNotificationPrefs,
+  activeView,
+  onSelectUnreadsView,
+  onSetNotificationLevel,
   style,
 }: SidebarProps) {
   const isGallery = useGalleryMode();
@@ -101,7 +114,7 @@ export function Sidebar({
   const [sidebarCollapse, setSidebarCollapse] = useState(loadCollapseState);
 
   useEffect(() => {
-    localStorage.setItem("openslack-sidebar-collapse", JSON.stringify(sidebarCollapse));
+    localStorage.setItem("openslaq-sidebar-collapse", JSON.stringify(sidebarCollapse));
   }, [sidebarCollapse]);
 
   const toggleChannelsCollapsed = useCallback(() => {
@@ -184,22 +197,74 @@ export function Sidebar({
         </button>
       )}
 
+      {onSelectUnreadsView && (() => {
+        const totalUnread = Object.entries(unreadCounts)
+          .filter(([id]) => channelNotificationPrefs?.[id] !== "muted")
+          .reduce((sum, [, count]) => sum + count, 0);
+        return (
+          <button
+            type="button"
+            onClick={onSelectUnreadsView}
+            className={`w-full px-4 py-2 text-[13px] bg-transparent border-none cursor-pointer text-left flex items-center gap-2 hover:bg-gray-800 ${
+              activeView === "unreads" ? "bg-white/15 text-white" : "text-gray-400"
+            }`}
+            data-testid="unreads-view-link"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75" />
+            </svg>
+            All Unreads
+            {totalUnread > 0 && (
+              <span className="ml-auto text-[11px] font-medium bg-red-600 text-white rounded-full px-1.5 min-w-[18px] text-center">
+                {totalUnread}
+              </span>
+            )}
+          </button>
+        );
+      })()}
+
       <div className="flex-1 overflow-y-auto">
+        {starredChannelIds && starredChannelIds.length > 0 && (() => {
+          const starredSet = new Set(starredChannelIds);
+          const starredChannels = channels.filter((ch) => starredSet.has(ch.id) && !ch.isArchived);
+          const starredDmsItems = dms.filter((dm) => starredSet.has(dm.channel.id));
+          return (
+            <StarredList
+              starredChannels={starredChannels}
+              starredDms={starredDmsItems}
+              activeChannelId={activeChannelId}
+              activeDmId={activeDmId}
+              onSelectChannel={onSelectChannel}
+              onSelectDm={onSelectDm}
+              unreadCounts={unreadCounts}
+              presence={presence}
+              activeHuddles={activeHuddles}
+              channelNotificationPrefs={channelNotificationPrefs}
+              onSetNotificationLevel={onSetNotificationLevel}
+            />
+          );
+        })()}
+
         <ChannelList
           activeChannelId={activeChannelId}
           onSelectChannel={onSelectChannel}
-          channels={channels}
+          channels={channels.filter((ch) => !ch.isArchived)}
           unreadCounts={unreadCounts}
           collapsed={sidebarCollapse.channels}
           onToggleCollapsed={toggleChannelsCollapsed}
           onCreateChannel={() => setCreateChannelOpen(true)}
           activeHuddles={activeHuddles}
+          channelNotificationPrefs={channelNotificationPrefs}
+          onSetNotificationLevel={onSetNotificationLevel}
         />
 
         <DmList
           activeDmId={activeDmId}
+          activeGroupDmId={activeGroupDmId}
           onSelectDm={onSelectDm}
+          onSelectGroupDm={onSelectGroupDm}
           dms={dms}
+          groupDms={groupDms}
           currentUserId={currentUserId}
           onNewDm={() => setNewDmOpen(true)}
           unreadCounts={unreadCounts}
@@ -209,18 +274,6 @@ export function Sidebar({
           activeHuddles={activeHuddles}
         />
       </div>
-
-      {currentHuddleChannelId && activeHuddles?.[currentHuddleChannelId] && onToggleMute && onLeaveHuddle && (
-        <HuddleBar
-          huddle={activeHuddles[currentHuddleChannelId]}
-          channels={channels}
-          dms={dms}
-          isMuted={isMuted ?? false}
-          onToggleMute={onToggleMute}
-          onLeave={onLeaveHuddle}
-          onSwitchDevice={onSwitchDevice}
-        />
-      )}
 
       {!isGallery && (
         <div className="user-button-full-width border-t border-gray-800 p-2">
@@ -232,6 +285,7 @@ export function Sidebar({
         open={newDmOpen}
         onClose={() => setNewDmOpen(false)}
         onSelectUser={onStartDm}
+        onCreateGroupDm={onStartGroupDm}
         workspaceSlug={workspaceSlug}
       />
 

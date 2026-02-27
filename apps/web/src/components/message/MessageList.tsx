@@ -3,31 +3,38 @@ import { useParams } from "react-router-dom";
 import { useSocket } from "../../hooks/useSocket";
 import { useSocketEvent } from "../../hooks/useSocketEvent";
 import { MessageItem } from "./MessageItem";
+import { HuddleSystemMessage } from "./HuddleSystemMessage";
 import { DaySeparator } from "./DaySeparator";
 import { isDifferentDay } from "./message-date-utils";
-import type { Message, ChannelId, MessageId, ReactionGroup } from "@openslack/shared";
-import { asChannelId } from "@openslack/shared";
+import type { Message, ChannelId, MessageId, UserId, ReactionGroup } from "@openslaq/shared";
+import { asChannelId } from "@openslaq/shared";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
 import { useChannelMessages } from "../../hooks/chat/useChannelMessages";
 import { useMessageMutations } from "../../hooks/chat/useMessageMutations";
 import { useLoadOlderMessages } from "../../hooks/chat/useLoadOlderMessages";
 import { useLoadNewerMessages } from "../../hooks/chat/useLoadNewerMessages";
+import { useBotActions } from "../../hooks/chat/useBotActions";
 import { useChatStore } from "../../state/chat-store";
 
 interface MessageListProps {
   channelId: string;
   onOpenThread?: (messageId: string) => void;
   onOpenProfile?: (userId: string) => void;
+  onJoinHuddle?: (channelId: string) => void;
+  onPinMessage?: (messageId: string) => void;
+  onUnpinMessage?: (messageId: string) => void;
+  onShareMessage?: (messageId: string) => void;
 }
 
-export function MessageList({ channelId, onOpenThread, onOpenProfile }: MessageListProps) {
+export function MessageList({ channelId, onOpenThread, onOpenProfile, onJoinHuddle, onPinMessage, onUnpinMessage, onShareMessage }: MessageListProps) {
   const user = useCurrentUser();
   const { workspaceSlug } = useParams<{ workspaceSlug: string }>();
   const { joinChannel } = useSocket();
   const { state, dispatch } = useChatStore();
-  const { toggleReaction, editMessage, deleteMessage } = useMessageMutations(user);
+  const { toggleReaction, editMessage, deleteMessage, markAsUnread } = useMessageMutations(user);
+  const { triggerAction } = useBotActions();
 
-  useChannelMessages(user, workspaceSlug, channelId);
+  useChannelMessages(workspaceSlug, channelId);
 
   const { loadOlder, loadingOlder, hasOlder } = useLoadOlderMessages(channelId);
   const { loadNewer, loadingNewer, hasNewer } = useLoadNewerMessages(channelId);
@@ -213,11 +220,41 @@ export function MessageList({ channelId, onOpenThread, onOpenProfile }: MessageL
     [channelId, dispatch],
   );
 
+  const handleMessagePinned = useCallback(
+    (payload: { messageId: MessageId; channelId: ChannelId; pinnedBy: UserId; pinnedAt: string }) => {
+      if (payload.channelId === channelId) {
+        dispatch({
+          type: "messages/updatePinStatus",
+          messageId: payload.messageId,
+          isPinned: true,
+          pinnedBy: payload.pinnedBy,
+          pinnedAt: payload.pinnedAt,
+        });
+      }
+    },
+    [channelId, dispatch],
+  );
+
+  const handleMessageUnpinned = useCallback(
+    (payload: { messageId: MessageId; channelId: ChannelId }) => {
+      if (payload.channelId === channelId) {
+        dispatch({
+          type: "messages/updatePinStatus",
+          messageId: payload.messageId,
+          isPinned: false,
+        });
+      }
+    },
+    [channelId, dispatch],
+  );
+
   useSocketEvent("message:new", handleNewMessage);
   useSocketEvent("message:updated", handleMessageUpdated);
   useSocketEvent("message:deleted", handleMessageDeleted);
   useSocketEvent("thread:updated", handleThreadUpdated);
   useSocketEvent("reaction:updated", handleReactionUpdated);
+  useSocketEvent("message:pinned", handleMessagePinned);
+  useSocketEvent("message:unpinned", handleMessageUnpinned);
 
   useEffect(() => {
     joinChannel(asChannelId(channelId));
@@ -251,15 +288,34 @@ export function MessageList({ channelId, onOpenThread, onOpenProfile }: MessageL
             return (
               <Fragment key={msg.id}>
                 {showSeparator && <DaySeparator date={new Date(msg.createdAt)} />}
-                <MessageItem
-                  message={msg}
-                  currentUserId={user?.id}
-                  onOpenThread={onOpenThread}
-                  onToggleReaction={toggleReaction}
-                  onOpenProfile={onOpenProfile}
-                  onEditMessage={editMessage}
-                  onDeleteMessage={deleteMessage}
-                />
+                {msg.type === "huddle" ? (
+                  <HuddleSystemMessage
+                    message={msg}
+                    activeHuddle={state.activeHuddles[msg.channelId] ?? null}
+                    onJoinHuddle={onJoinHuddle}
+                  />
+                ) : (
+                  <MessageItem
+                    message={msg}
+                    currentUserId={user?.id}
+                    senderStatusEmoji={(() => {
+                      const p = state.presence[msg.userId];
+                      if (!p?.statusEmoji) return null;
+                      if (p.statusExpiresAt && new Date(p.statusExpiresAt).getTime() <= Date.now()) return null;
+                      return p.statusEmoji;
+                    })()}
+                    onOpenThread={onOpenThread}
+                    onToggleReaction={toggleReaction}
+                    onOpenProfile={onOpenProfile}
+                    onEditMessage={editMessage}
+                    onDeleteMessage={deleteMessage}
+                    onMarkAsUnread={markAsUnread}
+                    onPinMessage={onPinMessage}
+                    onUnpinMessage={onUnpinMessage}
+                    onShareMessage={onShareMessage}
+                    onBotAction={triggerAction}
+                  />
+                )}
               </Fragment>
             );
           })}

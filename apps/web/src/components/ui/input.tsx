@@ -3,7 +3,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import clsx from "clsx";
 
 const inputVariants = cva(
-  "text-sm focus:outline-none focus:ring-2 focus:ring-slack-blue focus:border-transparent",
+  "text-sm focus:outline-none focus:ring-2 focus:ring-slaq-blue focus:border-transparent",
   {
     variants: {
       variant: {

@@ -8,8 +8,13 @@ test-results/
 playwright-report/
 blob-report/
 playwright/.cache/
+target/
+apps/desktop/src-tauri/gen/
 coverage/
 coverage-raw/
 railway.json
 .dev.log
 .dev.pid
+.expo/
+ios/
+android/

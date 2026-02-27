@@ -4,6 +4,7 @@ import { createWorkspaceSchema } from "./validation";
 import { createWorkspace, getWorkspacesForUser } from "./service";
 import { rlWorkspaceCreate, rlRead } from "../rate-limit";
 import { workspaceWithRoleSchema, workspaceSchema } from "../openapi/schemas";
+import { jsonResponse } from "../openapi/responses";
 
 const listWorkspacesRoute = createRoute({
   method: "get",
@@ -44,7 +45,7 @@ const app = new OpenAPIHono()
   .openapi(listWorkspacesRoute, async (c) => {
     const user = c.get("user");
     const workspaces = await getWorkspacesForUser(user.id);
-    return c.json(workspaces as any, 200);
+    return jsonResponse(c, workspaces, 200);
   })
   .openapi(createWorkspaceRoute, async (c) => {
     const user = c.get("user");
@@ -55,7 +56,7 @@ const app = new OpenAPIHono()
       throw new Error("Failed to generate unique workspace slug");
     }
 
-    return c.json(result as any, 201);
+    return jsonResponse(c, result, 201);
   });
 
 export default app;

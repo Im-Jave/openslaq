@@ -1,5 +1,5 @@
 import { stackApp } from "../stack";
-import { AuthError } from "./errors";
+import { AuthError } from "@openslaq/client-core";
 
 interface AuthJsonUser {
   getAuthJson: () => Promise<{ accessToken?: string | null }>;

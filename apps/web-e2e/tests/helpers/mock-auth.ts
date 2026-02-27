@@ -1,49 +1,14 @@
 import { type Page } from "@playwright/test";
-import * as jose from "jose";
+import { signTestJwt, PROJECT_ID, type TestUser } from "@openslaq/test-utils";
 
-const E2E_TEST_SECRET = "openslack-e2e-test-secret-do-not-use-in-prod";
-const PROJECT_ID = "924565c5-6377-44b7-aa75-6b7de8d311f4";
-const STACK_AUTH_BASE = "https://api.stack-auth.com/api/v1";
-const ISSUER = `${STACK_AUTH_BASE}/projects/${PROJECT_ID}`;
-
-export interface MockUser {
-  id: string;
-  displayName: string;
-  email: string;
-  emailVerified: boolean;
-}
+export type MockUser = TestUser;
 
 const defaultUser: MockUser = {
   id: "e2e-test-user-001",
   displayName: "Test User",
-  email: "test@openslack.dev",
+  email: "test@openslaq.dev",
   emailVerified: true,
 };
-
-async function signTestJwt(user: MockUser): Promise<string> {
-  const secret = new TextEncoder().encode(E2E_TEST_SECRET);
-  // SDK validates JWT payload against accessTokenPayloadSchema — all fields required
-  return await new jose.SignJWT({
-    email: user.email,
-    name: user.displayName,
-    email_verified: user.emailVerified,
-    project_id: PROJECT_ID,
-    branch_id: "main",
-    refresh_token_id: `e2e-rt-${user.id}`,
-    role: "authenticated",
-    selected_team_id: null,
-    is_anonymous: false,
-    is_restricted: false,
-    restricted_reason: null,
-  })
-    .setProtectedHeader({ alg: "HS256" })
-    .setSubject(user.id)
-    .setIssuer(ISSUER)
-    .setAudience(PROJECT_ID)
-    .setIssuedAt()
-    .setExpirationTime("1h")
-    .sign(secret);
-}
 
 function buildStackAuthUserResponse(user: MockUser) {
   return {
@@ -67,7 +32,7 @@ function buildStackAuthUserResponse(user: MockUser) {
 function buildProjectResponse() {
   return {
     id: PROJECT_ID,
-    display_name: "OpenSlack",
+    display_name: "OpenSlaq",
     config: {
       sign_up_enabled: true,
       credential_enabled: true,

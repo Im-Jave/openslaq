@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeAll } from "bun:test";
 import { createTestClient, createTestWorkspace, addToWorkspace, testId } from "./helpers/api-client";
 import type { hc } from "hono/client";
-import type { AppType } from "@openslack/api/app";
+import type { AppType } from "@openslaq/api/app";
 
 type Client = ReturnType<typeof hc<AppType>>;
 
@@ -14,7 +14,7 @@ describe("authorization — workspace membership enforcement", () => {
   beforeAll(async () => {
     const ctx = await createTestClient({
       id: `auth-owner-${testId()}`,
-      email: `auth-owner-${testId()}@openslack.dev`,
+      email: `auth-owner-${testId()}@openslaq.dev`,
     });
     ownerClient = ctx.client;
 
@@ -32,7 +32,7 @@ describe("authorization — workspace membership enforcement", () => {
     // Create a non-member user (authenticated but not in workspace)
     const ctx2 = await createTestClient({
       id: `auth-outsider-${testId()}`,
-      email: `auth-outsider-${testId()}@openslack.dev`,
+      email: `auth-outsider-${testId()}@openslaq.dev`,
     });
     nonMemberClient = ctx2.client;
   });
@@ -105,14 +105,14 @@ describe("authorization — channel-workspace verification", () => {
     // Create workspace A
     const { client: clientA } = await createTestClient({
       id: `cross-ws-a-${uid}`,
-      email: `cross-ws-a-${uid}@openslack.dev`,
+      email: `cross-ws-a-${uid}@openslaq.dev`,
     });
     const wsA = await createTestWorkspace(clientA);
 
     // Create workspace B with a channel
     const { client: clientB } = await createTestClient({
       id: `cross-ws-b-${uid}`,
-      email: `cross-ws-b-${uid}@openslack.dev`,
+      email: `cross-ws-b-${uid}@openslaq.dev`,
     });
     const wsB = await createTestWorkspace(clientB);
     const chanRes = await clientB.api.workspaces[":slug"].channels.$post({
@@ -142,7 +142,7 @@ describe("authorization — channel membership enforcement", () => {
     // Owner creates workspace and channel
     const ctx = await createTestClient({
       id: `chan-auth-owner-${uid}`,
-      email: `chan-auth-owner-${uid}@openslack.dev`,
+      email: `chan-auth-owner-${uid}@openslaq.dev`,
     });
     ownerClient = ctx.client;
 
@@ -167,7 +167,7 @@ describe("authorization — channel membership enforcement", () => {
     // Member joins workspace but NOT the channel
     const ctx2 = await createTestClient({
       id: `chan-auth-member-${uid}`,
-      email: `chan-auth-member-${uid}@openslack.dev`,
+      email: `chan-auth-member-${uid}@openslaq.dev`,
     });
     memberClient = ctx2.client;
     await addToWorkspace(ownerClient, slug, memberClient);
@@ -219,6 +219,56 @@ describe("authorization — channel membership enforcement", () => {
   });
 });
 
+describe("authorization — cross-workspace message access via /api/messages/:id", () => {
+  test("user in workspace B cannot GET/PUT/DELETE message from workspace A", async () => {
+    const uid = testId();
+
+    // User A creates workspace A with a message
+    const { client: clientA } = await createTestClient({
+      id: `cross-msg-a-${uid}`,
+      email: `cross-msg-a-${uid}@openslaq.dev`,
+    });
+    const wsA = await createTestWorkspace(clientA);
+    const chanRes = await clientA.api.workspaces[":slug"].channels.$post({
+      param: { slug: wsA.slug },
+      json: { name: `cross-msg-chan-${uid}` },
+    });
+    const channel = (await chanRes.json()) as { id: string };
+    const msgRes = await clientA.api.workspaces[":slug"].channels[":id"].messages.$post({
+      param: { slug: wsA.slug, id: channel.id },
+      json: { content: `cross-msg-${uid}` },
+    });
+    expect(msgRes.status).toBe(201);
+    const msg = (await msgRes.json()) as { id: string };
+
+    // User B creates their own workspace (different workspace)
+    const { client: clientB } = await createTestClient({
+      id: `cross-msg-b-${uid}`,
+      email: `cross-msg-b-${uid}@openslaq.dev`,
+    });
+    await createTestWorkspace(clientB);
+
+    // User B tries GET /api/messages/:id → 404
+    const getRes = await clientB.api.messages[":id"].$get({
+      param: { id: msg.id },
+    });
+    expect(getRes.status).toBe(404);
+
+    // User B tries PUT /api/messages/:id → 404
+    const putRes = await clientB.api.messages[":id"].$put({
+      param: { id: msg.id },
+      json: { content: "hacked" },
+    });
+    expect(putRes.status).toBe(404);
+
+    // User B tries DELETE /api/messages/:id → 404
+    const delRes = await clientB.api.messages[":id"].$delete({
+      param: { id: msg.id },
+    });
+    expect(delRes.status).toBe(404);
+  });
+});
+
 describe("authorization — positive tests", () => {
   let ownerClient: Client;
   let memberClient: Client;
@@ -230,7 +280,7 @@ describe("authorization — positive tests", () => {
 
     const ctx = await createTestClient({
       id: `pos-owner-${uid}`,
-      email: `pos-owner-${uid}@openslack.dev`,
+      email: `pos-owner-${uid}@openslaq.dev`,
     });
     ownerClient = ctx.client;
 
@@ -247,7 +297,7 @@ describe("authorization — positive tests", () => {
     // Member joins workspace
     const ctx2 = await createTestClient({
       id: `pos-member-${uid}`,
-      email: `pos-member-${uid}@openslack.dev`,
+      email: `pos-member-${uid}@openslaq.dev`,
     });
     memberClient = ctx2.client;
     await addToWorkspace(ownerClient, slug, memberClient);

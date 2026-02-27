@@ -22,6 +22,9 @@ export const userSchema = z
     displayName: z.string().describe("Display name"),
     email: z.string().describe("Email address"),
     avatarUrl: z.string().nullable().describe("Avatar URL"),
+    statusEmoji: z.string().nullable().describe("Custom status emoji"),
+    statusText: z.string().nullable().describe("Custom status text"),
+    statusExpiresAt: z.string().nullable().describe("Status expiration timestamp"),
     createdAt: z.string().describe("Creation timestamp"),
     updatedAt: z.string().describe("Last update timestamp"),
   })
@@ -56,13 +59,21 @@ export const channelSchema = z
     id: z.string().describe("Channel ID"),
     workspaceId: z.string().describe("Workspace ID"),
     name: z.string().describe("Channel name"),
-    type: z.enum(["public", "private", "dm"]).describe("Channel type"),
+    type: z.enum(["public", "private", "dm", "group_dm"]).describe("Channel type"),
     description: z.string().nullable().describe("Channel description"),
+    displayName: z.string().nullable().describe("Display name (used for group DMs)"),
+    isArchived: z.boolean().describe("Whether the channel is archived"),
     createdBy: z.string().nullable().describe("Creator user ID"),
     createdAt: z.string().describe("Creation timestamp"),
     memberCount: z.number().optional().describe("Number of members"),
   })
   .openapi("Channel");
+
+export const browseChannelSchema = channelSchema
+  .extend({
+    isMember: z.boolean().describe("Whether the current user is a member"),
+  })
+  .openapi("BrowseChannel");
 
 // ── Attachments ─────────────────────────────────────────────────────────
 
@@ -70,12 +81,12 @@ export const attachmentSchema = z
   .object({
     id: z.string().describe("Attachment ID"),
     messageId: z.string().nullable().describe("Associated message ID"),
-    storageKey: z.string().describe("Storage key"),
     filename: z.string().describe("Original filename"),
     mimeType: z.string().describe("MIME type"),
     size: z.number().describe("File size in bytes"),
     uploadedBy: z.string().describe("Uploader user ID"),
     createdAt: z.string().describe("Upload timestamp"),
+    downloadUrl: z.string().describe("Pre-signed download URL"),
   })
   .openapi("Attachment");
 
@@ -88,6 +99,34 @@ export const reactionGroupSchema = z
     userIds: z.array(z.string()).describe("User IDs who reacted"),
   })
   .openapi("ReactionGroup");
+
+// ── Link Previews ──────────────────────────────────────────────────────
+
+export const linkPreviewSchema = z
+  .object({
+    url: z.string().describe("URL"),
+    title: z.string().nullable().describe("Page title"),
+    description: z.string().nullable().describe("Page description"),
+    imageUrl: z.string().nullable().describe("OG image URL"),
+    siteName: z.string().nullable().describe("Site name"),
+    faviconUrl: z.string().nullable().describe("Favicon URL"),
+  })
+  .openapi("LinkPreview");
+
+// ── Shared Messages ─────────────────────────────────────────────────────
+
+export const sharedMessageInfoSchema = z
+  .object({
+    id: z.string().describe("Original message ID"),
+    channelId: z.string().describe("Original channel ID"),
+    channelName: z.string().describe("Original channel name"),
+    userId: z.string().describe("Original sender user ID"),
+    senderDisplayName: z.string().describe("Original sender display name"),
+    senderAvatarUrl: z.string().nullable().describe("Original sender avatar URL"),
+    content: z.string().describe("Original message content"),
+    createdAt: z.string().describe("Original message timestamp"),
+  })
+  .openapi("SharedMessageInfo");
 
 // ── Messages ────────────────────────────────────────────────────────────
 
@@ -104,6 +143,20 @@ export const messageSchema = z
     reactions: z.array(reactionGroupSchema).describe("Reaction groups"),
     senderDisplayName: z.string().optional().describe("Sender display name"),
     senderAvatarUrl: z.string().nullable().optional().describe("Sender avatar URL"),
+    isBot: z.boolean().optional().describe("Whether message was sent by a bot"),
+    botAppId: z.string().optional().describe("Bot app ID when sent by bot"),
+    actions: z.array(z.object({
+      id: z.string(),
+      type: z.literal("button"),
+      label: z.string(),
+      style: z.enum(["primary", "danger", "default"]).optional(),
+      value: z.string().optional(),
+    })).optional().describe("Interactive action buttons for bot messages"),
+    isPinned: z.boolean().optional().describe("Whether message is pinned"),
+    pinnedBy: z.string().nullable().optional().describe("User who pinned the message"),
+    pinnedAt: z.string().nullable().optional().describe("When the message was pinned"),
+    linkPreviews: z.array(linkPreviewSchema).optional().describe("Link preview cards"),
+    sharedMessage: sharedMessageInfoSchema.optional().nullable().describe("Shared/forwarded message info"),
     createdAt: z.string().describe("Creation timestamp"),
     updatedAt: z.string().describe("Last update timestamp"),
   })
@@ -112,15 +165,15 @@ export const messageSchema = z
 export const messageListSchema = z
   .object({
     messages: z.array(messageSchema).describe("List of messages"),
-    hasMore: z.boolean().describe("Whether more messages exist"),
-    nextCursor: z.string().optional().describe("Cursor for next page"),
+    hasMore: z.boolean().optional().describe("Whether more messages exist"),
+    nextCursor: z.string().nullable().optional().describe("Cursor for next page"),
   })
   .openapi("MessageList");
 
 export const messagesAroundSchema = z
   .object({
     messages: z.array(messageSchema).describe("Messages around target"),
-    targetFound: z.literal(true).describe("Whether target message was found"),
+    targetFound: z.boolean().describe("Whether target message was found"),
     olderCursor: z.string().nullable().describe("Cursor for older messages"),
     newerCursor: z.string().nullable().describe("Cursor for newer messages"),
     hasOlder: z.boolean().describe("Whether older messages exist"),
@@ -135,7 +188,7 @@ export const searchResultItemSchema = z
     messageId: z.string().describe("Message ID"),
     channelId: z.string().describe("Channel ID"),
     channelName: z.string().describe("Channel name"),
-    channelType: z.enum(["public", "private", "dm"]).describe("Channel type"),
+    channelType: z.enum(["public", "private", "dm", "group_dm"]).describe("Channel type"),
     userId: z.string().describe("Author user ID"),
     userDisplayName: z.string().describe("Sender display name"),
     content: z.string().describe("Message content"),
@@ -167,6 +220,9 @@ export const presenceEntrySchema = z
     userId: z.string().describe("User ID"),
     online: z.boolean().describe("Whether user is currently online"),
     lastSeenAt: z.string().nullable().describe("Last seen timestamp"),
+    statusEmoji: z.string().nullable().optional().describe("Custom status emoji"),
+    statusText: z.string().nullable().optional().describe("Custom status text"),
+    statusExpiresAt: z.string().nullable().optional().describe("Status expiration timestamp"),
   })
   .openapi("PresenceEntry");
 
@@ -236,6 +292,30 @@ export const dmListItemSchema = z
     otherUser: dmUserSchema.describe("Other user in the DM"),
   })
   .openapi("DmListItem");
+
+// ── Group DMs ──────────────────────────────────────────────────────────
+
+export const groupDmMemberSchema = z
+  .object({
+    id: z.string().describe("User ID"),
+    displayName: z.string().describe("Display name"),
+    avatarUrl: z.string().nullable().describe("Avatar URL"),
+  })
+  .openapi("GroupDmMember");
+
+export const groupDmResponseSchema = z
+  .object({
+    channel: channelSchema.describe("Group DM channel"),
+    members: z.array(groupDmMemberSchema).describe("Group DM members"),
+  })
+  .openapi("GroupDmResponse");
+
+export const groupDmListItemSchema = z
+  .object({
+    channel: channelSchema.describe("Group DM channel"),
+    members: z.array(groupDmMemberSchema).describe("Group DM members"),
+  })
+  .openapi("GroupDmListItem");
 
 // ── Uploads ─────────────────────────────────────────────────────────────
 

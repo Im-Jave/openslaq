@@ -1,5 +1,5 @@
-const NOTIFICATIONS_ENABLED_KEY = "openslack-notifications-enabled";
-const NOTIFICATIONS_SOUND_KEY = "openslack-notifications-sound";
+const NOTIFICATIONS_ENABLED_KEY = "openslaq-notifications-enabled";
+const NOTIFICATIONS_SOUND_KEY = "openslaq-notifications-sound";
 
 export function getNotificationPreferences(): {
   enabled: boolean;

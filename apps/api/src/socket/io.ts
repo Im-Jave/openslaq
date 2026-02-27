@@ -3,7 +3,7 @@ import type {
   ClientToServerEvents,
   ServerToClientEvents,
   SocketData,
-} from "@openslack/shared";
+} from "@openslaq/shared";
 
 type IO = Server<
   ClientToServerEvents,

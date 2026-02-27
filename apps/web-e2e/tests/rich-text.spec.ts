@@ -501,7 +501,7 @@ test.describe("Rich text formatting", () => {
     await bob.createMessage(channel.id, "> The best code is no code at all.\n\nWise words to live by.");
     await alice.createMessage(channel.id, "Here's our task list:\n- Set up CI pipeline\n- Write unit tests\n- Deploy to staging");
     await bob.createMessage(channel.id, "Sprint priorities:\n1. Fix the ~~login bug~~ authentication flow\n2. Add `dark mode` support\n3. Update API docs");
-    await alice.createMessage(channel.id, "Check out the docs at [OpenSlack Guide](https://example.com/guide)");
+    await alice.createMessage(channel.id, "Check out the docs at [OpenSlaq Guide](https://example.com/guide)");
     await bob.createMessage(channel.id, "Looks great! Let's ship it 🚀");
 
     await setupMockAuth(page, { id: SHOWCASE_ALICE.userId, displayName: SHOWCASE_ALICE.displayName, email: SHOWCASE_ALICE.email });

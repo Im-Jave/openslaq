@@ -1,7 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import { createTestClient, createTestWorkspace, testId } from "./helpers/api-client";
 import type { hc } from "hono/client";
-import type { AppType } from "@openslack/api/app";
+import type { AppType } from "@openslaq/api/app";
 
 type Client = ReturnType<typeof hc<AppType>>;
 
@@ -23,7 +23,7 @@ async function setupWorkspaceWithMember() {
 
   const { client: ownerClient } = await createTestClient({
     id: ownerId,
-    email: `${ownerId}@openslack.dev`,
+    email: `${ownerId}@openslaq.dev`,
     displayName: "Owner User",
   });
   const ws = await createTestWorkspace(ownerClient);
@@ -38,7 +38,7 @@ async function setupWorkspaceWithMember() {
   // Member joins
   const { client: memberClient } = await createTestClient({
     id: memberId,
-    email: `${memberId}@openslack.dev`,
+    email: `${memberId}@openslaq.dev`,
     displayName: "Member User",
   });
   await memberClient.api.invites[":code"].accept.$post({
@@ -51,6 +51,7 @@ async function setupWorkspaceWithMember() {
 async function getMembers(client: Client, slug: string): Promise<Member[]> {
   const res = await client.api.workspaces[":slug"].members.$get({
     param: { slug },
+    query: {},
   });
   return (await res.json()) as Member[];
 }
@@ -63,7 +64,7 @@ async function inviteMember(ownerClient: Client, slug: string, userId: string): 
   const invite = (await inviteRes.json()) as { code: string };
   const { client } = await createTestClient({
     id: userId,
-    email: `${userId}@openslack.dev`,
+    email: `${userId}@openslaq.dev`,
   });
   await client.api.invites[":code"].accept.$post({
     param: { code: invite.code },
@@ -74,7 +75,7 @@ async function inviteMember(ownerClient: Client, slug: string, userId: string): 
 async function asUserClient(userId: string): Promise<Client> {
   const { client } = await createTestClient({
     id: userId,
-    email: `${userId}@openslack.dev`,
+    email: `${userId}@openslaq.dev`,
   });
   return client;
 }

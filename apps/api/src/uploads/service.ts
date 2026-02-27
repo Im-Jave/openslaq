@@ -1,18 +1,25 @@
-import { eq, and, isNull, inArray, sql } from "drizzle-orm";
+import { eq, and, isNull, isNotNull, or, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
 import { attachments } from "./schema";
-import { channels } from "../channels/schema";
+import { channels, channelMembers } from "../channels/schema";
 import { messages } from "../messages/schema";
 import { workspaceMembers } from "../workspaces/schema";
 import { uploadToS3, getPresignedDownloadUrl, deleteFromS3 } from "./s3";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0] | typeof db;
 
+function sanitizeFilename(name: string): string {
+  // Remove path separators and null bytes, keep only the basename
+  // eslint-disable-next-line no-control-regex
+  return name.replace(/[\\/\0]/g, "_").replace(/^\.+/, "_");
+}
+
 export async function createAttachment(
   file: { name: string; type: string; bytes: Uint8Array },
   userId: string,
 ) {
-  const key = `uploads/${userId}/${crypto.randomUUID()}/${file.name}`;
+  const safeName = sanitizeFilename(file.name);
+  const key = `uploads/${userId}/${crypto.randomUUID()}/${safeName}`;
   await uploadToS3(key, file.bytes, file.type);
 
   const [attachment] = await db
@@ -98,7 +105,24 @@ export async function canAccessAttachment(
         eq(workspaceMembers.userId, userId),
       ),
     )
-    .where(eq(messages.id, attachment.messageId))
+    .leftJoin(
+      channelMembers,
+      and(
+        eq(channelMembers.channelId, channels.id),
+        eq(channelMembers.userId, userId),
+      ),
+    )
+    .where(
+      and(
+        eq(messages.id, attachment.messageId),
+        // Public channels: workspace membership is sufficient
+        // Private/DM channels: must also be a channel member
+        or(
+          eq(channels.type, "public"),
+          isNotNull(channelMembers.userId),
+        ),
+      ),
+    )
     .limit(1);
 
   return !!row;

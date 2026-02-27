@@ -1,5 +1,7 @@
-import { pgTable, text, timestamp, uuid, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, uuid, primaryKey, pgEnum } from "drizzle-orm/pg-core";
 import { users } from "../users/schema";
+
+export const workspaceRoleEnum = pgEnum("workspace_role", ["owner", "admin", "member"]);
 
 export const workspaces = pgTable("workspaces", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -13,11 +15,11 @@ export const workspaceMembers = pgTable(
   {
     workspaceId: uuid("workspace_id")
       .notNull()
-      .references(() => workspaces.id),
+      .references(() => workspaces.id, { onDelete: "cascade" }),
     userId: text("user_id")
       .notNull()
-      .references(() => users.id),
-    role: text("role").notNull().default("member"), // 'owner' | 'admin' | 'member'
+      .references(() => users.id, { onDelete: "cascade" }),
+    role: workspaceRoleEnum("role").notNull().default("member"),
     joinedAt: timestamp("joined_at").defaultNow().notNull(),
   },
   (t) => [primaryKey({ columns: [t.workspaceId, t.userId] })],

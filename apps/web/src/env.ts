@@ -4,10 +4,15 @@ function required(key: string): string {
   return value;
 }
 
+function optional(key: string): string | undefined {
+  return import.meta.env[key] as string | undefined;
+}
+
 export const env = {
   VITE_API_URL: required("VITE_API_URL"),
   VITE_STACK_PROJECT_ID: required("VITE_STACK_PROJECT_ID"),
   VITE_STACK_PUBLISHABLE_CLIENT_KEY: required(
     "VITE_STACK_PUBLISHABLE_CLIENT_KEY",
   ),
+  VITE_LIVEKIT_WS_URL: optional("VITE_LIVEKIT_WS_URL"),
 } as const;

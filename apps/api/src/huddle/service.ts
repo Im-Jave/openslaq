@@ -1,5 +1,6 @@
-import type { HuddleState, HuddleParticipant, ChannelId } from "@openslack/shared";
-import { asChannelId, asUserId } from "@openslack/shared";
+import type { HuddleState, HuddleParticipant, ChannelId } from "@openslaq/shared";
+import { asChannelId, asUserId } from "@openslaq/shared";
+import { RoomManager } from "@openslaq/huddle/server";
 
 // channelId → HuddleState
 const activeHuddles = new Map<string, HuddleState>();
@@ -7,7 +8,10 @@ const activeHuddles = new Map<string, HuddleState>();
 // userId → channelId (each user can only be in one huddle)
 const userHuddle = new Map<string, string>();
 
-export function startHuddle(channelId: string, userId: string): HuddleState {
+// channelId → Set of all userIds who ever joined (for finalParticipants)
+const huddleParticipantHistory = new Map<string, Set<string>>();
+
+export function startHuddle(channelId: string, userId: string, livekitRoom?: string): HuddleState {
   const existing = activeHuddles.get(channelId);
   if (existing) {
     return joinHuddle(channelId, userId);
@@ -19,6 +23,8 @@ export function startHuddle(channelId: string, userId: string): HuddleState {
   const participant: HuddleParticipant = {
     userId: asUserId(userId),
     isMuted: false,
+    isCameraOn: false,
+    isScreenSharing: false,
     joinedAt: new Date().toISOString(),
   };
 
@@ -26,10 +32,14 @@ export function startHuddle(channelId: string, userId: string): HuddleState {
     channelId: asChannelId(channelId),
     participants: [participant],
     startedAt: new Date().toISOString(),
+    livekitRoom: livekitRoom ?? RoomManager.roomNameForChannel(channelId),
+    screenShareUserId: null,
+    messageId: null,
   };
 
   activeHuddles.set(channelId, huddle);
   userHuddle.set(userId, channelId);
+  huddleParticipantHistory.set(channelId, new Set([userId]));
   return huddle;
 }
 
@@ -50,11 +60,15 @@ export function joinHuddle(channelId: string, userId: string): HuddleState {
   const participant: HuddleParticipant = {
     userId: asUserId(userId),
     isMuted: false,
+    isCameraOn: false,
+    isScreenSharing: false,
     joinedAt: new Date().toISOString(),
   };
 
   huddle.participants.push(participant);
   userHuddle.set(userId, channelId);
+  const history = huddleParticipantHistory.get(channelId);
+  if (history) history.add(userId);
   return huddle;
 }
 
@@ -62,28 +76,48 @@ export interface LeaveResult {
   huddle: HuddleState | null;
   ended: boolean;
   channelId: ChannelId | null;
+  messageId: string | null;
+  startedAt: string | null;
+  participantHistory: string[];
 }
 
 export function leaveHuddle(userId: string): LeaveResult {
   const channelId = userHuddle.get(userId);
   if (!channelId) {
-    return { huddle: null, ended: false, channelId: null };
+    return { huddle: null, ended: false, channelId: null, messageId: null, startedAt: null, participantHistory: [] };
   }
 
   userHuddle.delete(userId);
   const huddle = activeHuddles.get(channelId);
   if (!huddle) {
-    return { huddle: null, ended: false, channelId: asChannelId(channelId) };
+    return { huddle: null, ended: false, channelId: asChannelId(channelId), messageId: null, startedAt: null, participantHistory: [] };
   }
 
   huddle.participants = huddle.participants.filter((p) => p.userId !== userId);
 
-  if (huddle.participants.length === 0) {
-    activeHuddles.delete(channelId);
-    return { huddle: null, ended: true, channelId: asChannelId(channelId) };
+  // Clear screen share if the leaving user was sharing
+  if (huddle.screenShareUserId === userId) {
+    huddle.screenShareUserId = null;
   }
 
-  return { huddle, ended: false, channelId: asChannelId(channelId) };
+  if (huddle.participants.length === 0) {
+    const messageId = huddle.messageId;
+    const startedAt = huddle.startedAt;
+    const history = huddleParticipantHistory.get(channelId);
+    const participantHistory = history ? [...history] : [];
+    activeHuddles.delete(channelId);
+    huddleParticipantHistory.delete(channelId);
+    return { huddle: null, ended: true, channelId: asChannelId(channelId), messageId, startedAt, participantHistory };
+  }
+
+  return { huddle, ended: false, channelId: asChannelId(channelId), messageId: huddle.messageId, startedAt: huddle.startedAt, participantHistory: [] };
+}
+
+export function setHuddleMessageId(channelId: string, messageId: string): void {
+  const huddle = activeHuddles.get(channelId);
+  if (huddle) {
+    huddle.messageId = messageId;
+  }
 }
 
 export function setMuted(userId: string, isMuted: boolean): HuddleState | null {
@@ -128,4 +162,5 @@ export function removeUserFromAllHuddles(userId: string): LeaveResult {
 export function _resetForTests(): void {
   activeHuddles.clear();
   userHuddle.clear();
+  huddleParticipantHistory.clear();
 }

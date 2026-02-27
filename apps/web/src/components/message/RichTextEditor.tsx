@@ -1,12 +1,14 @@
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
+import Mention from "@tiptap/extension-mention";
 import Placeholder from "@tiptap/extension-placeholder";
 import { CodeBlockShiki } from "tiptap-extension-code-block-shiki";
 import { Markdown, type MarkdownStorage } from "tiptap-markdown";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import clsx from "clsx";
 import { EditorToolbar } from "./EditorToolbar";
+import { createMentionSuggestion, type MentionSuggestionItem } from "./useMentionSuggestion";
 import "./rich-text-editor.css";
 
 interface RichTextEditorProps {
@@ -19,6 +21,7 @@ interface RichTextEditorProps {
   initialContent?: string | null;
   onContentChange?: (markdown: string) => void;
   filePreview?: React.ReactNode;
+  members?: MentionSuggestionItem[];
 }
 
 // VS Code language IDs that differ from Shiki's bundled language names
@@ -41,10 +44,21 @@ export function RichTextEditor({
   initialContent,
   onContentChange,
   filePreview,
+  members = [],
 }: RichTextEditorProps) {
   const [focused, setFocused] = useState(false);
   const [isEmpty, setIsEmpty] = useState(true);
   const [, setTxCount] = useState(0);
+
+  // Keep members ref stable for the suggestion plugin
+  const membersRef = useRef(members);
+  membersRef.current = members;
+
+  const mentionSuggestion = useMemo(
+    () => createMentionSuggestion(() => membersRef.current),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
 
   const editor = useEditor({
     extensions: [
@@ -53,6 +67,13 @@ export function RichTextEditor({
         themes: { light: "light-plus", dark: "dark-plus" },
       }),
       Link.configure({ autolink: true, openOnClick: false }),
+      Mention.configure({
+        HTMLAttributes: { class: "mention" },
+        renderText({ node }) {
+          return `<@${node.attrs.id}>`;
+        },
+        suggestion: mentionSuggestion,
+      }),
       Placeholder.configure({ placeholder }),
       Markdown,
     ],
@@ -156,7 +177,7 @@ export function RichTextEditor({
       className={clsx(
         "rounded-lg overflow-hidden transition-[border-color,box-shadow] duration-150",
         focused
-          ? "border border-slack-blue shadow-[0_0_0_1px_#1264a3]"
+          ? "border border-slaq-blue shadow-[0_0_0_1px_#1264a3]"
           : "border border-border-input",
       )}
     >

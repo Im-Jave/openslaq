@@ -7,6 +7,11 @@ interface MessageActionBarProps {
   onOpenThread?: () => void;
   onEditMessage?: () => void;
   onDeleteMessage?: () => void;
+  onMarkAsUnread?: () => void;
+  onPinMessage?: () => void;
+  onUnpinMessage?: () => void;
+  onShareMessage?: () => void;
+  isPinned?: boolean;
   isOwnMessage?: boolean;
 }
 
@@ -15,6 +20,11 @@ export function MessageActionBar({
   onOpenThread,
   onEditMessage,
   onDeleteMessage,
+  onMarkAsUnread,
+  onPinMessage,
+  onUnpinMessage,
+  onShareMessage,
+  isPinned,
   isOwnMessage,
 }: MessageActionBarProps) {
   const [showPicker, setShowPicker] = useState(false);
@@ -111,7 +121,7 @@ export function MessageActionBar({
           </Button>
         </Tooltip>
       )}
-      {isOwnMessage && (onEditMessage || onDeleteMessage) && (
+      {(onMarkAsUnread || onPinMessage || onUnpinMessage || onShareMessage || (isOwnMessage && (onEditMessage || onDeleteMessage))) && (
         <div className="relative">
           <Tooltip content="More actions">
             <Button
@@ -135,7 +145,59 @@ export function MessageActionBar({
               data-testid="message-overflow-dropdown"
               className="absolute right-0 top-full mt-1 bg-surface border border-border-default rounded-md shadow-lg py-1 z-50 min-w-[160px]"
             >
-              {onEditMessage && (
+              {onMarkAsUnread && (
+                <button
+                  type="button"
+                  data-testid="mark-unread-action"
+                  onClick={() => {
+                    setShowMenu(false);
+                    onMarkAsUnread();
+                  }}
+                  className="w-full text-left px-3 py-1.5 text-sm text-primary hover:bg-surface-secondary cursor-pointer bg-transparent border-none"
+                >
+                  Mark as unread
+                </button>
+              )}
+              {isPinned && onUnpinMessage && (
+                <button
+                  type="button"
+                  data-testid="unpin-message-action"
+                  onClick={() => {
+                    setShowMenu(false);
+                    onUnpinMessage();
+                  }}
+                  className="w-full text-left px-3 py-1.5 text-sm text-primary hover:bg-surface-secondary cursor-pointer bg-transparent border-none"
+                >
+                  Unpin message
+                </button>
+              )}
+              {!isPinned && onPinMessage && (
+                <button
+                  type="button"
+                  data-testid="pin-message-action"
+                  onClick={() => {
+                    setShowMenu(false);
+                    onPinMessage();
+                  }}
+                  className="w-full text-left px-3 py-1.5 text-sm text-primary hover:bg-surface-secondary cursor-pointer bg-transparent border-none"
+                >
+                  Pin message
+                </button>
+              )}
+              {onShareMessage && (
+                <button
+                  type="button"
+                  data-testid="share-message-action"
+                  onClick={() => {
+                    setShowMenu(false);
+                    onShareMessage();
+                  }}
+                  className="w-full text-left px-3 py-1.5 text-sm text-primary hover:bg-surface-secondary cursor-pointer bg-transparent border-none"
+                >
+                  Share message
+                </button>
+              )}
+              {isOwnMessage && onEditMessage && (
                 <button
                   type="button"
                   data-testid="edit-message-action"
@@ -148,7 +210,7 @@ export function MessageActionBar({
                   Edit message
                 </button>
               )}
-              {onDeleteMessage && (
+              {isOwnMessage && onDeleteMessage && (
                 <button
                   type="button"
                   data-testid="delete-message-action"

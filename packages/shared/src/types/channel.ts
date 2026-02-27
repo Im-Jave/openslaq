@@ -7,6 +7,8 @@ export interface Channel {
   name: string;
   type: ChannelType;
   description: string | null;
+  displayName: string | null;
+  isArchived: boolean;
   createdBy: UserId | null;
   createdAt: string;
   memberCount?: number;
@@ -17,3 +19,5 @@ export interface ChannelMember {
   userId: UserId;
   joinedAt: string;
 }
+
+export type ChannelNotifyLevel = "all" | "mentions" | "muted";

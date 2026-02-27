@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import type { SearchResultItem as SearchResultItemType, Channel } from "@openslack/shared";
+import type { SearchResultItem as SearchResultItemType, Channel } from "@openslaq/shared";
 import { SearchResultItem } from "./SearchResultItem";
 import { useSearch } from "../../hooks/chat/useSearch";
 import type { DmConversation } from "../../state/chat-store";

@@ -9,7 +9,7 @@ test.describe("Home page (authenticated)", () => {
     await page.goto(`/w/${testWorkspace.slug}`);
 
     // Sidebar header
-    await expect(page.getByText("OpenSlack")).toBeVisible();
+    await expect(page.getByText("OpenSlaq")).toBeVisible();
 
     // User display name in sidebar
     await expect(page.getByText("Alice Johnson")).toBeVisible();

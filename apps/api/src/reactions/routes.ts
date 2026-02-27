@@ -1,11 +1,13 @@
 import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
-import { asMessageId } from "@openslack/shared";
+import { asMessageId } from "@openslaq/shared";
 import { auth } from "../auth/middleware";
 import { requireMessageChannelAccess } from "../messages/middleware";
 import { toggleReaction } from "./service";
 import { getIO } from "../socket/io";
 import { rlReaction } from "../rate-limit";
 import { reactionsResponseSchema, errorSchema } from "../openapi/schemas";
+import { jsonResponse } from "../openapi/responses";
+import { webhookDispatcher } from "../bots/webhook-dispatcher";
 
 const toggleReactionRoute = createRoute({
   method: "post",
@@ -56,8 +58,13 @@ const app = new OpenAPIHono().openapi(toggleReactionRoute, async (c) => {
     channelId: result.channelId,
     reactions: result.reactions,
   });
+  webhookDispatcher.dispatchForChannel({
+    type: "reaction:updated",
+    channelId: result.channelId,
+    data: { messageId, channelId: result.channelId, reactions: result.reactions },
+  });
 
-  return c.json({ reactions: result.reactions } as any, 200);
+  return jsonResponse(c, { reactions: result.reactions }, 200);
 });
 
 export default app;

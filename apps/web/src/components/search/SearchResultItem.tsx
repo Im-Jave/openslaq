@@ -1,9 +1,52 @@
-import type { SearchResultItem as SearchResultItemType } from "@openslack/shared";
+import { useMemo } from "react";
+import type { SearchResultItem as SearchResultItemType } from "@openslaq/shared";
 
 interface SearchResultItemProps {
   result: SearchResultItemType;
   isSelected: boolean;
   onClick: () => void;
+}
+
+/** Safely render a headline with <mark> highlights as React elements */
+function HighlightedText({ html }: { html: string }) {
+  const parts = useMemo(() => {
+    // Split on <mark>...</mark> tags, keeping the marked text
+    const segments: { text: string; highlighted: boolean }[] = [];
+    const regex = /<mark>(.*?)<\/mark>/gi;
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+
+    while ((match = regex.exec(html)) !== null) {
+      if (match.index > lastIndex) {
+        segments.push({ text: stripTags(html.slice(lastIndex, match.index)), highlighted: false });
+      }
+      segments.push({ text: stripTags(match[1]!), highlighted: true });
+      lastIndex = regex.lastIndex;
+    }
+
+    if (lastIndex < html.length) {
+      segments.push({ text: stripTags(html.slice(lastIndex)), highlighted: false });
+    }
+
+    return segments;
+  }, [html]);
+
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.highlighted ? (
+          <mark key={i} className="bg-mark-bg rounded-sm px-0.5">{part.text}</mark>
+        ) : (
+          <span key={i}>{part.text}</span>
+        ),
+      )}
+    </>
+  );
+}
+
+/** Strip any remaining HTML tags for safety */
+function stripTags(str: string): string {
+  return str.replace(/<[^>]*>/g, "");
 }
 
 export function SearchResultItem({ result, isSelected, onClick }: SearchResultItemProps) {
@@ -43,10 +86,9 @@ export function SearchResultItem({ result, isSelected, onClick }: SearchResultIt
           </span>
         )}
       </div>
-      <div
-        className="text-sm text-primary line-clamp-2 [&_mark]:bg-mark-bg [&_mark]:rounded-sm [&_mark]:px-0.5"
-        dangerouslySetInnerHTML={{ __html: result.headline }}
-      />
+      <div className="text-sm text-primary line-clamp-2">
+        <HighlightedText html={result.headline} />
+      </div>
     </button>
   );
 }

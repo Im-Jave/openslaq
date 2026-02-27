@@ -7,7 +7,7 @@ describe("users", () => {
     const { client, user } = await createTestClient({
       id,
       displayName: `Test ${id}`,
-      email: `${id}@openslack.dev`,
+      email: `${id}@openslaq.dev`,
     });
 
     const res = await client.api.users.me.$get();
@@ -23,7 +23,7 @@ describe("users", () => {
     const { client } = await createTestClient({
       id,
       displayName: `Original ${id}`,
-      email: `${id}@openslack.dev`,
+      email: `${id}@openslaq.dev`,
     });
 
     // Ensure user exists in DB
@@ -42,7 +42,7 @@ describe("users", () => {
     const { client } = await createTestClient({
       id,
       displayName: `Test ${id}`,
-      email: `${id}@openslack.dev`,
+      email: `${id}@openslaq.dev`,
     });
 
     // Ensure user exists in DB
@@ -61,7 +61,7 @@ describe("users", () => {
     const { client } = await createTestClient({
       id,
       displayName: `Original ${id}`,
-      email: `${id}@openslack.dev`,
+      email: `${id}@openslaq.dev`,
     });
 
     // Ensure user exists in DB
@@ -74,7 +74,7 @@ describe("users", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { displayName: string; email: string };
     expect(body.displayName).toBe("New Name");
-    expect(body.email).toBe(`${id}@openslack.dev`);
+    expect(body.email).toBe(`${id}@openslaq.dev`);
   });
 
   test("PATCH /me returns the updated user", async () => {
@@ -82,7 +82,7 @@ describe("users", () => {
     const { client } = await createTestClient({
       id,
       displayName: `Test ${id}`,
-      email: `${id}@openslack.dev`,
+      email: `${id}@openslaq.dev`,
     });
 
     // Ensure user exists in DB
@@ -96,6 +96,6 @@ describe("users", () => {
     expect(body.id).toBe(id);
     expect(body.displayName).toBe("Final Name");
     expect(body.avatarUrl).toBe("data:image/jpeg;base64,abc");
-    expect(body.email).toBe(`${id}@openslack.dev`);
+    expect(body.email).toBe(`${id}@openslaq.dev`);
   });
 });

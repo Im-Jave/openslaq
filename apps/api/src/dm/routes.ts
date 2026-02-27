@@ -1,10 +1,11 @@
 import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
-import { asUserId } from "@openslack/shared";
+import { asUserId } from "@openslaq/shared";
 import { createDmSchema } from "./validation";
 import { getOrCreateDm, listDms } from "./service";
 import type { WorkspaceMemberEnv } from "../workspaces/role-middleware";
 import { rlRead } from "../rate-limit";
 import { dmChannelResponseSchema, dmListItemSchema, errorSchema } from "../openapi/schemas";
+import { jsonResponse } from "../openapi/responses";
 
 const createDmRoute = createRoute({
   method: "post",
@@ -62,15 +63,15 @@ const app = new OpenAPIHono<WorkspaceMemberEnv>()
 
     const body = { channel: result.channel, otherUser: result.otherUser };
     if (result.created) {
-      return c.json(body as any, 201);
+      return jsonResponse(c, body, 201);
     }
-    return c.json(body as any, 200);
+    return jsonResponse(c, body, 200);
   })
   .openapi(listDmsRoute, async (c) => {
     const user = c.get("user");
     const workspace = c.get("workspace");
     const dms = await listDms(workspace.id, user.id);
-    return c.json(dms as any, 200);
+    return jsonResponse(c, dms, 200);
   });
 
 export default app;

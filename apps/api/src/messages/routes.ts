@@ -1,12 +1,15 @@
 import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
-import { asMessageId } from "@openslack/shared";
+import { asMessageId } from "@openslaq/shared";
 import { auth } from "../auth/middleware";
 import { editMessageSchema } from "./validation";
 import { editMessage, deleteMessage } from "./service";
+import { reUnfurlMessageLinks } from "./link-preview-service";
 import { requireMessageChannelAccess } from "./middleware";
 import { getIO } from "../socket/io";
 import { rlMessageSend, rlRead } from "../rate-limit";
 import { messageSchema, errorSchema, okSchema } from "../openapi/schemas";
+import { jsonResponse } from "../openapi/responses";
+import { webhookDispatcher } from "../bots/webhook-dispatcher";
 
 const getMessageRoute = createRoute({
   method: "get",
@@ -32,7 +35,7 @@ const editMessageRoute = createRoute({
   summary: "Edit message",
   description: "Edits a message. Only the message author can edit.",
   security: [{ Bearer: [] }],
-  middleware: [auth, rlMessageSend] as const,
+  middleware: [auth, rlMessageSend, requireMessageChannelAccess] as const,
   request: {
     params: z.object({ id: z.string().describe("Message ID") }),
     body: { content: { "application/json": { schema: editMessageSchema } } },
@@ -50,7 +53,7 @@ const deleteMessageRoute = createRoute({
   summary: "Delete message",
   description: "Deletes a message. Only the message author can delete.",
   security: [{ Bearer: [] }],
-  middleware: [auth, rlMessageSend] as const,
+  middleware: [auth, rlMessageSend, requireMessageChannelAccess] as const,
   request: {
     params: z.object({ id: z.string().describe("Message ID") }),
   },
@@ -63,7 +66,7 @@ const deleteMessageRoute = createRoute({
 const app = new OpenAPIHono()
   .openapi(getMessageRoute, async (c) => {
     const message = c.get("message");
-    return c.json(message as any, 200);
+    return jsonResponse(c, message, 200);
   })
   .openapi(editMessageRoute, async (c) => {
     const user = c.get("user");
@@ -77,8 +80,10 @@ const app = new OpenAPIHono()
 
     const io = getIO();
     io.to(`channel:${updated.channelId}`).emit("message:updated", updated);
+    webhookDispatcher.dispatchForChannel({ type: "message:updated", channelId: updated.channelId, data: updated });
+    reUnfurlMessageLinks(updated.id, updated.channelId, content).catch(console.error);
 
-    return c.json(updated as any, 200);
+    return jsonResponse(c, updated, 200);
   })
   .openapi(deleteMessageRoute, async (c) => {
     const user = c.get("user");
@@ -91,6 +96,7 @@ const app = new OpenAPIHono()
 
     const io = getIO();
     io.to(`channel:${deleted.channelId}`).emit("message:deleted", { id: deleted.id, channelId: deleted.channelId });
+    webhookDispatcher.dispatchForChannel({ type: "message:deleted", channelId: deleted.channelId, data: { id: deleted.id, channelId: deleted.channelId } });
 
     return c.json({ ok: true as const }, 200);
   });

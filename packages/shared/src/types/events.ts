@@ -1,7 +1,8 @@
 import type { MessageId, ChannelId, UserId } from "./ids";
+import type { Channel } from "./channel";
 import type { Message } from "./message";
 import type { ReactionGroup } from "./reaction";
-import type { HuddleState, WebRTCOffer, WebRTCAnswer, WebRTCIceCandidate } from "./huddle";
+import type { HuddleState } from "./huddle";
 
 export interface SocketData {
   userId: UserId;
@@ -12,13 +13,6 @@ export interface ClientToServerEvents {
   "channel:join": (payload: { channelId: ChannelId }) => void;
   "channel:leave": (payload: { channelId: ChannelId }) => void;
   "message:typing": (payload: { channelId: ChannelId }) => void;
-  "huddle:start": (payload: { channelId: ChannelId }) => void;
-  "huddle:join": (payload: { channelId: ChannelId }) => void;
-  "huddle:leave": () => void;
-  "huddle:mute": (payload: { isMuted: boolean }) => void;
-  "webrtc:offer": (payload: Omit<WebRTCOffer, "fromUserId">) => void;
-  "webrtc:answer": (payload: Omit<WebRTCAnswer, "fromUserId">) => void;
-  "webrtc:ice-candidate": (payload: Omit<WebRTCIceCandidate, "fromUserId">) => void;
 }
 
 // Server → Client events
@@ -54,15 +48,24 @@ export interface ServerToClientEvents {
       userId: string;
       status: "online" | "offline";
       lastSeenAt: string | null;
+      statusEmoji?: string | null;
+      statusText?: string | null;
+      statusExpiresAt?: string | null;
     }>;
+  }) => void;
+  "user:statusUpdated": (payload: {
+    userId: string;
+    statusEmoji: string | null;
+    statusText: string | null;
+    statusExpiresAt: string | null;
   }) => void;
   "huddle:started": (huddle: HuddleState) => void;
   "huddle:updated": (huddle: HuddleState) => void;
   "huddle:ended": (payload: { channelId: ChannelId }) => void;
   "huddle:sync": (payload: { huddles: HuddleState[] }) => void;
-  "webrtc:offer": (payload: WebRTCOffer) => void;
-  "webrtc:answer": (payload: WebRTCAnswer) => void;
-  "webrtc:ice-candidate": (payload: WebRTCIceCandidate) => void;
+  "channel:updated": (payload: { channelId: ChannelId; channel: Channel }) => void;
   "channel:member-added": (payload: { channelId: ChannelId; userId: UserId }) => void;
   "channel:member-removed": (payload: { channelId: ChannelId; userId: UserId }) => void;
+  "message:pinned": (payload: { messageId: MessageId; channelId: ChannelId; pinnedBy: UserId; pinnedAt: string }) => void;
+  "message:unpinned": (payload: { messageId: MessageId; channelId: ChannelId }) => void;
 }

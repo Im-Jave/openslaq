@@ -1,6 +1,6 @@
 import { createMiddleware } from "hono/factory";
-import { asMessageId, asChannelId } from "@openslack/shared";
-import type { Message } from "@openslack/shared";
+import { asMessageId, asChannelId } from "@openslaq/shared";
+import type { Message } from "@openslaq/shared";
 import type { AuthEnv } from "../auth/types";
 import { getMessageById } from "./service";
 import { isChannelMember } from "../channels/service";
@@ -12,7 +12,11 @@ export type MessageEnv = AuthEnv & {
 };
 
 export const requireMessageChannelAccess = createMiddleware<MessageEnv>(async (c, next) => {
-  const messageId = asMessageId(c.req.param("id")!);
+  const idParam = c.req.param("id");
+  if (!idParam) {
+    return c.json({ error: "Message not found" }, 404);
+  }
+  const messageId = asMessageId(idParam);
   const user = c.get("user");
 
   const message = await getMessageById(messageId);

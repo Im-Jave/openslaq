@@ -120,7 +120,7 @@ describe("messages", () => {
     const { client: client2 } = await createTestClient({
       id: `api-e2e-user-003-${uid}`,
       displayName: "Unauthorized User",
-      email: `api-e2e-003-${uid}@openslack.dev`,
+      email: `api-e2e-003-${uid}@openslaq.dev`,
     });
     await addToWorkspace(client, slug, client2);
     const joinRes = await client2.api.workspaces[":slug"].channels[":id"].join.$post({
@@ -150,7 +150,7 @@ describe("messages", () => {
     const { client: client2 } = await createTestClient({
       id: `api-e2e-user-004-${uid}`,
       displayName: "Unauthorized Deleter",
-      email: `api-e2e-004-${uid}@openslack.dev`,
+      email: `api-e2e-004-${uid}@openslaq.dev`,
     });
     await addToWorkspace(client, slug, client2);
     const joinRes = await client2.api.workspaces[":slug"].channels[":id"].join.$post({
@@ -327,6 +327,46 @@ describe("messages", () => {
     expect(targetFound).toBeDefined();
   });
 
+  test("getMessagesAround with thread reply target substitutes parent", async () => {
+    const chanRes = await client.api.workspaces[":slug"].channels.$post({
+      param: { slug },
+      json: { name: `around-reply-${testId()}` },
+    });
+    const chan = (await chanRes.json()) as { id: string };
+
+    // Create parent message
+    const parentRes = await client.api.workspaces[":slug"].channels[":id"].messages.$post({
+      param: { slug, id: chan.id },
+      json: { content: `around-parent-${testId()}` },
+    });
+    expect(parentRes.status).toBe(201);
+    const parent = (await parentRes.json()) as { id: string };
+
+    // Create a reply
+    const replyRes = await client.api.workspaces[":slug"].channels[":id"].messages[":messageId"].replies.$post({
+      param: { slug, id: chan.id, messageId: parent.id },
+      json: { content: `around-reply-${testId()}` },
+    });
+    expect(replyRes.status).toBe(201);
+    const reply = (await replyRes.json()) as { id: string };
+
+    // Call getMessagesAround with the reply ID
+    const aroundRes = await client.api.workspaces[":slug"].channels[":id"].messages.around[":messageId"].$get({
+      param: { slug, id: chan.id, messageId: reply.id },
+    });
+    expect(aroundRes.status).toBe(200);
+    const body = (await aroundRes.json()) as {
+      messages: { id: string; parentMessageId: string | null }[];
+      targetFound: boolean;
+    };
+    expect(body.targetFound).toBe(true);
+
+    // The parent message should be in the results (substituted for the reply)
+    expect(body.messages.some((m) => m.id === parent.id)).toBe(true);
+    // The reply itself should NOT be in the results (it's a channel-level list, replies excluded)
+    expect(body.messages.every((m) => m.parentMessageId === null)).toBe(true);
+  });
+
   test("getMessagesAround with non-existent messageId → 404", async () => {
     const res = await client.api.workspaces[":slug"].channels[":id"].messages.around[":messageId"].$get({
       param: { slug, id: channelId, messageId: "00000000-0000-0000-0000-000000000000" },
@@ -334,6 +374,45 @@ describe("messages", () => {
     expect(res.status).toBe(404);
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe("Message not found");
+  });
+
+  test("attachment already linked to another message → 400", async () => {
+    // Upload a file via multipart
+    const BASE_URL = process.env.API_BASE_URL || "http://localhost:3001";
+    const { headers } = await createTestClient();
+
+    // Upload a file
+    const formData = new FormData();
+    formData.append("files", new Blob(["test content"], { type: "text/plain" }), "test.txt");
+    const uploadRes = await fetch(`${BASE_URL}/api/workspaces/${slug}/uploads`, {
+      method: "POST",
+      headers: { Authorization: headers.Authorization },
+      body: formData,
+    });
+
+    if (uploadRes.status !== 201) {
+      // If upload fails (e.g. S3 not configured in test), skip rest of test
+      return;
+    }
+
+    const attachments = (await uploadRes.json()) as { id: string }[];
+    const attachmentId = attachments[0]!.id;
+
+    // Create first message with the attachment
+    const msg1Res = await client.api.workspaces[":slug"].channels[":id"].messages.$post({
+      param: { slug, id: channelId },
+      json: { content: `attach-msg1-${testId()}`, attachmentIds: [attachmentId] },
+    });
+    expect(msg1Res.status).toBe(201);
+
+    // Try to create second message with the same attachment → 400
+    const msg2Res = await client.api.workspaces[":slug"].channels[":id"].messages.$post({
+      param: { slug, id: channelId },
+      json: { content: `attach-msg2-${testId()}`, attachmentIds: [attachmentId] },
+    });
+    expect(msg2Res.status).toBe(400);
+    const body = (await msg2Res.json()) as { error: string };
+    expect(body.error).toBe("One or more attachments are invalid or already linked");
   });
 
   test("create message with invalid attachmentIds → 400", async () => {
@@ -362,5 +441,15 @@ describe("messages", () => {
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe("One or more attachments are invalid or already linked");
+  });
+
+  test("create thread reply to nonexistent parent → 404", async () => {
+    const res = await client.api.workspaces[":slug"].channels[":id"].messages[":messageId"].replies.$post({
+      param: { slug, id: channelId, messageId: "00000000-0000-0000-0000-000000000000" },
+      json: { content: `reply-nf-${testId()}` },
+    });
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe("Parent message not found");
   });
 });

@@ -1,7 +1,7 @@
 import type { Dispatch, ReactNode } from "react";
 import { useEffect, useLayoutEffect, useRef } from "react";
-import type { Message } from "@openslack/shared";
-import { asChannelId, asMessageId, asUserId } from "@openslack/shared";
+import type { Message } from "@openslaq/shared";
+import { asChannelId, asMessageId, asUserId } from "@openslaq/shared";
 import { SocketContext, type SocketContextValue } from "../socket/SocketProvider";
 import { ChatStoreProvider, useChatStore, type ChatStoreState } from "../state/chat-store";
 import {
@@ -22,7 +22,7 @@ import {
   DEMO_WORKSPACES,
 } from "./mock-data";
 
-const STORAGE_KEY = "openslack-demo-state-v1";
+const STORAGE_KEY = "openslaq-demo-state-v1";
 
 const noopSocket: SocketContextValue = {
   socket: null,
@@ -38,6 +38,7 @@ function seedDemoStore(dispatch: Dispatch<{ type: string; [key: string]: unknown
     channels: DEMO_CHANNELS,
     workspaces: DEMO_WORKSPACES,
     dms: DEMO_DMS,
+    groupDms: [],
   });
 
   for (const [channelId, messages] of Object.entries(DEMO_CHANNEL_MESSAGES)) {
@@ -184,6 +185,7 @@ function useDemoSimulation(initialized: boolean) {
         latestReplyAt: null,
         attachments: [],
         reactions: [],
+        mentions: [],
         createdAt,
         updatedAt: createdAt,
       };

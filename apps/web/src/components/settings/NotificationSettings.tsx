@@ -3,7 +3,24 @@ import {
   getNotificationPreferences,
   setNotificationPreferences,
 } from "../../lib/notification-preferences";
+import { isTauri } from "../../lib/tauri";
 import { Switch } from "../ui";
+
+async function checkTauriPermission(): Promise<NotificationPermission> {
+  const { isPermissionGranted } = await import(
+    "@tauri-apps/plugin-notification"
+  );
+  return (await isPermissionGranted()) ? "granted" : "default";
+}
+
+async function requestTauriPermission(): Promise<NotificationPermission> {
+  const { isPermissionGranted, requestPermission } = await import(
+    "@tauri-apps/plugin-notification"
+  );
+  if (await isPermissionGranted()) return "granted";
+  const result = await requestPermission();
+  return result === "granted" ? "granted" : "denied";
+}
 
 export function NotificationSettings() {
   const [enabled, setEnabled] = useState(false);
@@ -15,20 +32,27 @@ export function NotificationSettings() {
     const prefs = getNotificationPreferences();
     setEnabled(prefs.enabled);
     setSound(prefs.sound);
-    if (typeof Notification !== "undefined") {
+    if (isTauri()) {
+      checkTauriPermission().then(setPermissionState);
+    } else if (typeof Notification !== "undefined") {
       setPermissionState(Notification.permission);
     }
   }, []);
 
   const handleToggleEnabled = useCallback(async (checked: boolean) => {
     if (checked) {
-      if (typeof Notification !== "undefined") {
-        const permission = await Notification.requestPermission();
-        setPermissionState(permission);
-        if (permission === "granted") {
-          setEnabled(true);
-          setNotificationPreferences({ enabled: true });
-        }
+      let permission: NotificationPermission;
+      if (isTauri()) {
+        permission = await requestTauriPermission();
+      } else if (typeof Notification !== "undefined") {
+        permission = await Notification.requestPermission();
+      } else {
+        return;
+      }
+      setPermissionState(permission);
+      if (permission === "granted") {
+        setEnabled(true);
+        setNotificationPreferences({ enabled: true });
       }
     } else {
       setEnabled(false);

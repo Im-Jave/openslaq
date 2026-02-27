@@ -28,12 +28,26 @@ export function rateLimit(config: RateLimitConfig) {
   });
 }
 
+function getClientIp(c: Parameters<ReturnType<typeof createMiddleware>>[0]): string {
+  // Try getConnInfo from @hono/node-server when running under the Node adapter
+  try {
+    const { getConnInfo } = require("@hono/node-server/conninfo");
+    const info = getConnInfo(c);
+    if (info?.remote?.address) return info.remote.address;
+  } catch {
+    // Not running under node-server adapter (e.g. Bun.serve in tests)
+  }
+  // Fallback: use request headers (less reliable but better than crashing)
+  return (
+    c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ||
+    c.req.header("x-real-ip") ||
+    "unknown"
+  );
+}
+
 export function rateLimitByIp(config: RateLimitConfig) {
   return createMiddleware(async (c, next) => {
-    const ip =
-      c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ||
-      c.req.header("x-real-ip") ||
-      "unknown";
+    const ip = getClientIp(c);
     const key = `${config.bucket}:${ip}`;
     const result = checkRateLimit(key, config.max, config.windowSec);
 

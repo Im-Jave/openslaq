@@ -1,5 +1,4 @@
-import type { Attachment } from "@openslack/shared";
-import { env } from "../../env";
+import type { Attachment } from "@openslaq/shared";
 
 interface MessageAttachmentsProps {
   attachments: Attachment[];
@@ -11,16 +10,11 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function getDownloadUrl(id: string): string {
-  return `${env.VITE_API_URL}/api/uploads/${id}/download`;
-}
-
 function ImageAttachment({ attachment }: { attachment: Attachment }) {
-  const url = getDownloadUrl(attachment.id);
   return (
-    <a href={url} target="_blank" rel="noopener noreferrer">
+    <a href={attachment.downloadUrl} target="_blank" rel="noopener noreferrer">
       <img
-        src={url}
+        src={attachment.downloadUrl}
         alt={attachment.filename}
         className="max-w-[360px] max-h-[300px] rounded-md block cursor-pointer"
       />
@@ -29,25 +23,23 @@ function ImageAttachment({ attachment }: { attachment: Attachment }) {
 }
 
 function VideoAttachment({ attachment }: { attachment: Attachment }) {
-  const url = getDownloadUrl(attachment.id);
   return (
     <video
       controls
-      src={url}
+      src={attachment.downloadUrl}
       className="max-w-[360px] max-h-[300px] rounded-md block"
     />
   );
 }
 
 function FileAttachment({ attachment }: { attachment: Attachment }) {
-  const url = getDownloadUrl(attachment.id);
   return (
     <a
-      href={url}
+      href={attachment.downloadUrl}
       target="_blank"
       rel="noopener noreferrer"
       data-testid="file-download-link"
-      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-surface-tertiary rounded-md no-underline text-slack-blue text-[13px]"
+      className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-surface-tertiary rounded-md no-underline text-slaq-blue text-[13px]"
     >
       <span>{attachment.filename}</span>
       <span className="text-faint text-[11px]">({formatFileSize(attachment.size)})</span>

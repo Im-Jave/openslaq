@@ -2,8 +2,8 @@ import { eq, and, inArray } from "drizzle-orm";
 import { db } from "../db";
 import { reactions } from "./schema";
 import { messages } from "../messages/schema";
-import type { ReactionGroup, MessageId, UserId, ChannelId } from "@openslack/shared";
-import { asUserId } from "@openslack/shared";
+import type { ReactionGroup, MessageId, UserId, ChannelId } from "@openslaq/shared";
+import { asUserId } from "@openslaq/shared";
 
 export async function toggleReaction(
   messageId: MessageId,

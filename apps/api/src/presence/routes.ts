@@ -4,6 +4,7 @@ import { getWorkspacePresence } from "./service";
 import { rlRead } from "../rate-limit";
 import { presenceEntrySchema } from "../openapi/schemas";
 import { z } from "@hono/zod-openapi";
+import { jsonResponse } from "../openapi/responses";
 
 const getPresenceRoute = createRoute({
   method: "get",
@@ -24,7 +25,7 @@ const getPresenceRoute = createRoute({
 const app = new OpenAPIHono<WorkspaceMemberEnv>().openapi(getPresenceRoute, async (c) => {
   const workspace = c.get("workspace");
   const presence = await getWorkspacePresence(workspace.id);
-  return c.json(presence as any, 200);
+  return jsonResponse(c, presence, 200);
 });
 
 export default app;

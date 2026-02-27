@@ -34,7 +34,7 @@ test.describe("Direct Messages", () => {
 
     // Select ourselves — use the dialog-specific button with email text
     const dialog = page.locator("div").filter({ hasText: "New Direct Message" }).last();
-    await dialog.getByText("test@openslack.dev").click();
+    await dialog.getByText("test@openslaq.dev").click();
 
     // DM header should show with "(notes)" for self-DM
     await expect(page.getByText("Test User (notes)")).toBeVisible();

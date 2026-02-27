@@ -1,5 +1,5 @@
 import type { AuthEnv } from "../auth/types";
-import type { Workspace } from "@openslack/shared";
+import type { Workspace } from "@openslaq/shared";
 
 export type WorkspaceEnv = AuthEnv & {
   Variables: AuthEnv["Variables"] & {

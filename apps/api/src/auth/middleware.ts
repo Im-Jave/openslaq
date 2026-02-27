@@ -1,7 +1,7 @@
 import { createMiddleware } from "hono/factory";
 import * as jose from "jose";
 import { z } from "zod";
-import { asUserId } from "@openslack/shared";
+import { asUserId } from "@openslaq/shared";
 import { jwks, jwtVerifyOptions, e2eTestSecret } from "./jwt";
 import { upsertUser } from "../users/service";
 import type { AuthEnv } from "./types";

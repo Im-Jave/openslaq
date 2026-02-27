@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { ServerToClientEvents } from "@openslack/shared";
+import type { ServerToClientEvents } from "@openslaq/shared";
 import { useSocket } from "./useSocket";
 
 export function useSocketEvent<E extends keyof ServerToClientEvents>(
@@ -15,15 +15,14 @@ export function useSocketEvent<E extends keyof ServerToClientEvents>(
 
   useEffect(() => {
     if (!socket) return;
-    const socketApi = socket as unknown as {
-      on: (event: E, listener: (...args: unknown[]) => void) => void;
-      off: (event: E, listener: (...args: unknown[]) => void) => void;
+    const socketApi = socket as {
+      on: (event: E, listener: ServerToClientEvents[E]) => void;
+      off: (event: E, listener: ServerToClientEvents[E]) => void;
     };
-
-    const listener = (...args: unknown[]) => {
-      const current = handlerRef.current as (...listenerArgs: unknown[]) => void;
+    const listener: ServerToClientEvents[E] = ((...args: never[]) => {
+      const current = handlerRef.current as (...listenerArgs: never[]) => void;
       current(...args);
-    };
+    }) as ServerToClientEvents[E];
 
     socketApi.on(event, listener);
     return () => {

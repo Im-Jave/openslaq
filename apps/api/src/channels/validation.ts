@@ -10,4 +10,8 @@ export const addChannelMemberSchema = z.object({
   userId: z.string().min(1),
 });
 
+export const updateChannelSchema = z.object({
+  description: z.string().max(500).nullable(),
+});
+
 export type CreateChannel = z.infer<typeof createChannelSchema>;

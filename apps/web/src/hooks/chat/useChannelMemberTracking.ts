@@ -1,53 +1,62 @@
 import { useCallback } from "react";
+import type { Channel, ChannelId, UserId } from "@openslaq/shared";
+import {
+  handleChannelMemberAdded,
+  handleChannelMemberRemoved,
+  normalizeChannel,
+} from "@openslaq/client-core";
+import { api } from "../../api";
+import { useAuthProvider } from "../../lib/api-client";
 import { useSocketEvent } from "../useSocketEvent";
 import { useChatStore } from "../../state/chat-store";
 import { useCurrentUser } from "../useCurrentUser";
-import { api } from "../../api";
-import { authorizedRequest } from "../../lib/api-client";
-import type { Channel, ChannelId, UserId } from "@openslack/shared";
 import { useSocket } from "../useSocket";
 
 export function useChannelMemberTracking(workspaceSlug?: string) {
-  const { dispatch } = useChatStore();
+  const { state, dispatch } = useChatStore();
   const user = useCurrentUser();
   const { socket } = useSocket();
+  const auth = useAuthProvider();
 
-  const handleMemberAdded = useCallback(
+  const onMemberAdded = useCallback(
     (payload: { channelId: ChannelId; userId: UserId }) => {
-      if (!user || payload.userId !== user.id) return;
-
-      // Current user was added to a private channel — re-fetch channels to add it
-      if (!workspaceSlug) return;
-      void (async () => {
-        const res = await authorizedRequest(user, (headers) =>
-          api.api.workspaces[":slug"].channels.$get(
-            { param: { slug: workspaceSlug } },
-            { headers },
-          ),
-        );
-        const channels = (await res.json()) as Channel[];
-        const newChannel = channels.find((c) => c.id === payload.channelId);
-        if (newChannel) {
-          dispatch({ type: "workspace/addChannel", channel: newChannel });
-          // Join the socket room for the new channel
-          socket?.emit("channel:join", { channelId: payload.channelId });
-        }
-      })();
+      if (!user || !workspaceSlug) return;
+      const deps = { api, auth, dispatch, getState: () => state };
+      void handleChannelMemberAdded(deps, {
+        socket,
+        channelId: payload.channelId,
+        userId: payload.userId,
+        currentUserId: user.id,
+        workspaceSlug,
+      });
     },
-    [user, workspaceSlug, dispatch, socket],
+    [auth, dispatch, socket, state, user, workspaceSlug],
   );
 
-  const handleMemberRemoved = useCallback(
+  const onMemberRemoved = useCallback(
     (payload: { channelId: ChannelId; userId: UserId }) => {
-      if (!user || payload.userId !== user.id) return;
-
-      // Current user was removed from a private channel
-      dispatch({ type: "workspace/removeChannel", channelId: payload.channelId });
-      socket?.emit("channel:leave", { channelId: payload.channelId });
+      if (!user) return;
+      handleChannelMemberRemoved(dispatch, {
+        socket,
+        channelId: payload.channelId,
+        userId: payload.userId,
+        currentUserId: user.id,
+      });
     },
-    [user, dispatch, socket],
+    [dispatch, socket, user],
   );
 
-  useSocketEvent("channel:member-added", handleMemberAdded);
-  useSocketEvent("channel:member-removed", handleMemberRemoved);
+  const onChannelUpdated = useCallback(
+    (payload: { channelId: ChannelId; channel: Channel }) => {
+      dispatch({
+        type: "workspace/updateChannel",
+        channel: normalizeChannel(payload.channel as Parameters<typeof normalizeChannel>[0]),
+      });
+    },
+    [dispatch],
+  );
+
+  useSocketEvent("channel:updated", onChannelUpdated);
+  useSocketEvent("channel:member-added", onMemberAdded);
+  useSocketEvent("channel:member-removed", onMemberRemoved);
 }

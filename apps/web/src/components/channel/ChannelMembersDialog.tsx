@@ -9,8 +9,7 @@ import { Button } from "../ui/button";
 import { Avatar } from "../ui/avatar";
 import { useChannelMembersApi, type ChannelMember } from "../../hooks/api/useChannelMembersApi";
 import { useWorkspaceMembersApi } from "../../hooks/api/useWorkspaceMembersApi";
-import { useCurrentUser } from "../../hooks/useCurrentUser";
-import type { ChannelType } from "@openslack/shared";
+import type { ChannelType } from "@openslaq/shared";
 import type { PresenceEntry } from "../../state/chat-store";
 
 interface ChannelMembersDialogProps {
@@ -36,9 +35,8 @@ export function ChannelMembersDialog({
   canManageMembers,
   channelCreatorId,
 }: ChannelMembersDialogProps) {
-  const user = useCurrentUser();
-  const { listChannelMembers, addMember, removeMember } = useChannelMembersApi(user);
-  const { listMembers: listWorkspaceMembers } = useWorkspaceMembersApi(user);
+  const { listChannelMembers, addMember, removeMember } = useChannelMembersApi();
+  const { listMembers: listWorkspaceMembers } = useWorkspaceMembersApi();
   const [members, setMembers] = useState<ChannelMember[]>([]);
   const [search, setSearch] = useState("");
   const [addingMode, setAddingMode] = useState(false);
@@ -232,8 +230,15 @@ export function ChannelMembersDialog({
                     />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium text-primary truncate">
-                      {member.displayName}
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm font-medium text-primary truncate">
+                        {member.displayName}
+                      </span>
+                      {member.id.startsWith("bot:") && (
+                        <span className="inline-flex items-center px-1 py-0 rounded text-[9px] font-semibold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
+                          APP
+                        </span>
+                      )}
                     </div>
                     <div className="text-xs text-faint truncate">
                       {member.email}

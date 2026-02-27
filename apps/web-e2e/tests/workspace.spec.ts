@@ -61,6 +61,7 @@ test.describe("Workspace creation", () => {
     await setupMockAuth(page);
     await openWorkspaceListWithRetry(page);
     await expect(page.getByText("Your Workspaces")).toBeVisible();
+    await expect(page.getByText("Get the desktop app for a better experience.")).not.toBeVisible();
 
     // The test workspace should be rendered as a clickable card
     const wsCard = page.getByTestId(`workspace-card-${testWorkspace.slug}`);

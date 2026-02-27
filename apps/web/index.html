@@ -3,13 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>OpenSlack</title>
+    <title>OpenSlaq</title>
     <script>
       (function() {
-        var t = localStorage.getItem('openslack-theme');
+        var t = localStorage.getItem('openslaq-theme');
         if (t !== 'light' && t !== 'dark') {
           t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-          localStorage.setItem('openslack-theme', t);
+          localStorage.setItem('openslaq-theme', t);
         }
         if (t === 'dark') document.documentElement.classList.add('dark');
       })();

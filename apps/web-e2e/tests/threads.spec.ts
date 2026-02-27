@@ -4,7 +4,7 @@ import { setupMockAuth } from "./helpers/mock-auth";
 
 async function openGeneralChannel(page: Page, workspaceSlug: string) {
   // Clear sidebar collapse state that may persist from other tests in same worker
-  await page.addInitScript(() => localStorage.removeItem("openslack-sidebar-collapse"));
+  await page.addInitScript(() => localStorage.removeItem("openslaq-sidebar-collapse"));
 
   // Navigate and handle auth redirect if needed (retry only for auth)
   for (let attempt = 0; attempt < 3; attempt++) {
@@ -152,7 +152,7 @@ test.describe("Threads", () => {
     await expect(mainContent).not.toContainText(replyContent);
   });
 
-  test("thread panel loads more replies on scroll", async ({ page, testWorkspace }) => {
+  test("thread panel loads newest replies first, loads older on scroll up", async ({ page, testWorkspace }) => {
     test.setTimeout(180000);
 
     const channel = await testWorkspace.api.getChannelByName("general");
@@ -178,18 +178,19 @@ test.describe("Threads", () => {
     await page.getByTestId("reply-action-trigger").click();
     await expect(page.getByTestId("thread-panel")).toBeVisible();
 
-    // Wait for initial replies to load (first page of 50)
-    await expect(page.getByText("reply-001")).toBeVisible({ timeout: 15000 });
+    // Wait for initial replies to load — newest replies should be visible first
+    // (reply-051 is the newest, should be in the initial page)
+    await expect(page.getByText("reply-051")).toBeVisible({ timeout: 15000 });
 
-    // Scroll to bottom of thread panel to trigger loading more replies.
+    // Scroll to top of thread panel to trigger loading older replies.
     // Use toPass() to retry scrolling — the first scroll may not trigger pagination
     // if the container hasn't finished rendering.
     const scrollContainer = page.getByTestId("thread-panel").locator(".overflow-y-auto");
     await expect(async () => {
       await scrollContainer.evaluate((el) => {
-        el.scrollTop = el.scrollHeight;
+        el.scrollTop = 0;
       });
-      await expect(page.getByText("reply-051")).toBeVisible({ timeout: 5000 });
+      await expect(page.getByText("reply-001")).toBeVisible({ timeout: 5000 });
     }).toPass({ timeout: 60_000, intervals: [500, 1000, 2000, 3000] });
   });
 

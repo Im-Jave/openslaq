@@ -1,11 +1,12 @@
-import { useRef, useCallback, useState, forwardRef, useImperativeHandle } from "react";
+import { useRef, useCallback, useState, useEffect, forwardRef, useImperativeHandle } from "react";
 import { useParams } from "react-router-dom";
+import { RichTextEditor, type MentionSuggestionItem } from "@openslaq/editor";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
-import { RichTextEditor } from "./RichTextEditor";
 import { FilePreviewList } from "./FilePreviewList";
 import { useFileUpload } from "../../hooks/useFileUpload";
 import { useDraftMessage } from "../../hooks/useDraftMessage";
 import { useMessageMutations } from "../../hooks/chat/useMessageMutations";
+import { useWorkspaceMembersApi } from "../../hooks/api/useWorkspaceMembersApi";
 import { AuthError } from "../../lib/errors";
 import { redirectToAuth } from "../../lib/auth";
 
@@ -14,14 +15,16 @@ interface MessageInputProps {
   channelName?: string | null;
   parentMessageId?: string | null;
   externalDragDrop?: boolean;
+  onTyping?: () => void;
 }
 
 export interface MessageInputHandle {
   addFiles: (files: FileList | File[]) => void;
+  focus: () => void;
 }
 
 export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
-  function MessageInput({ channelId, channelName, parentMessageId, externalDragDrop }, ref) {
+  function MessageInput({ channelId, channelName, parentMessageId, externalDragDrop, onTyping }, ref) {
     const user = useCurrentUser();
     const { workspaceSlug } = useParams<{ workspaceSlug: string }>();
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -30,9 +33,30 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
     const { sendMessage } = useMessageMutations(user);
     const draftKey = parentMessageId ? `thread-${parentMessageId}` : channelId;
     const { draft, saveDraft, clearDraft } = useDraftMessage(draftKey);
+    const { listMembers } = useWorkspaceMembersApi();
+    const [mentionMembers, setMentionMembers] = useState<MentionSuggestionItem[]>([]);
+
+    useEffect(() => {
+      if (!workspaceSlug) return;
+      listMembers(workspaceSlug).then((members) => {
+        setMentionMembers(
+          members
+            .filter((m) => m.id !== user?.id)
+            .map((m) => ({
+              id: m.id,
+              displayName: m.displayName,
+              avatarUrl: m.avatarUrl,
+            })),
+        );
+      }).catch(() => {});
+    }, [workspaceSlug, listMembers, user?.id]);
 
     useImperativeHandle(ref, () => ({
       addFiles: (files: FileList | File[]) => upload.addFiles(files),
+      focus: () => {
+        const el = document.querySelector<HTMLElement>("[contenteditable=true]");
+        el?.focus();
+      },
     }), [upload]);
 
     const handleSubmit = async (markdown: string) => {
@@ -112,6 +136,14 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
       [upload],
     );
 
+    const handleContentChange = useCallback(
+      (content: string) => {
+        saveDraft(content);
+        onTyping?.();
+      },
+      [onTyping, saveDraft],
+    );
+
     const placeholder = parentMessageId
       ? "Reply in thread..."
       : channelName
@@ -138,7 +170,7 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
     return (
       <div className="px-4 pb-4 relative" {...localDragProps}>
         {!externalDragDrop && dragOver && (
-          <div className="absolute inset-0 bg-slack-blue/[0.08] border-2 border-dashed border-slack-blue rounded-lg z-10 flex items-center justify-center text-sm text-slack-blue pointer-events-none">
+          <div className="absolute inset-0 bg-slaq-blue/[0.08] border-2 border-dashed border-slaq-blue rounded-lg z-10 flex items-center justify-center text-sm text-slaq-blue pointer-events-none">
             Drop files here
           </div>
         )}
@@ -158,8 +190,9 @@ export const MessageInput = forwardRef<MessageInputHandle, MessageInputProps>(
           onFilePaste={handleFilePaste}
           hasAttachments={upload.hasFiles}
           initialContent={draft}
-          onContentChange={saveDraft}
+          onContentChange={handleContentChange}
           filePreview={filePreview}
+          members={mentionMembers}
         />
         {upload.error && (
           <div className="text-danger-text text-xs mt-1">{upload.error}</div>

@@ -1,5 +1,5 @@
-import type { Role } from "@openslack/shared";
-import { ROLES } from "@openslack/shared";
+import type { Role } from "@openslaq/shared";
+import { ROLES } from "@openslaq/shared";
 
 const ROLE_LEVEL: Record<Role, number> = {
   [ROLES.OWNER]: 3,

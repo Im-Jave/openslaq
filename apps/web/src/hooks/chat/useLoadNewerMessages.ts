@@ -1,48 +1,27 @@
 import { useCallback } from "react";
 import { useParams } from "react-router-dom";
-import { useCurrentUser } from "../useCurrentUser";
+import { loadNewerMessages } from "@openslaq/client-core";
 import { api } from "../../api";
-import { authorizedRequest } from "../../lib/api-client";
+import { useAuthProvider } from "../../lib/api-client";
 import { useChatStore } from "../../state/chat-store";
 import { useGalleryMode } from "../../gallery/gallery-context";
 
 export function useLoadNewerMessages(channelId: string) {
-  const user = useCurrentUser();
   const { workspaceSlug } = useParams<{ workspaceSlug: string }>();
   const { state, dispatch } = useChatStore();
   const isGallery = useGalleryMode();
+  const auth = useAuthProvider();
 
   const pagination = state.channelPagination[channelId];
   const hasNewer = pagination?.hasNewer ?? false;
   const loadingNewer = pagination?.loadingNewer ?? false;
 
   const loadNewer = useCallback(async () => {
-    if (isGallery || !user || !workspaceSlug || !pagination?.newerCursor || loadingNewer || !hasNewer) return;
+    if (isGallery || !workspaceSlug || !pagination?.newerCursor || loadingNewer || !hasNewer) return;
 
-    dispatch({ type: "channel/setLoadingNewer", channelId, loading: true });
-
-    try {
-      const response = await authorizedRequest(user, (headers) =>
-        api.api.workspaces[":slug"].channels[":id"].messages.$get(
-          {
-            param: { slug: workspaceSlug, id: channelId },
-            query: { cursor: pagination.newerCursor!, direction: "newer" },
-          },
-          { headers },
-        ),
-      );
-      const data = await response.json();
-      dispatch({
-        type: "channel/appendMessages",
-        channelId,
-        messages: data.messages,
-        newerCursor: data.nextCursor,
-        hasNewer: data.nextCursor !== null,
-      });
-    } catch {
-      dispatch({ type: "channel/setLoadingNewer", channelId, loading: false });
-    }
-  }, [isGallery, user, workspaceSlug, channelId, pagination?.newerCursor, loadingNewer, hasNewer, dispatch]);
+    const deps = { api, auth, dispatch, getState: () => state };
+    void loadNewerMessages(deps, { workspaceSlug, channelId, cursor: pagination.newerCursor });
+  }, [isGallery, auth, workspaceSlug, channelId, pagination?.newerCursor, loadingNewer, hasNewer, dispatch, state]);
 
   return { loadNewer, loadingNewer, hasNewer };
 }

@@ -4,6 +4,7 @@ import { useWorkspaceMembersApi } from "../../hooks/api/useWorkspaceMembersApi";
 import { useChatStore, type PresenceEntry } from "../../state/chat-store";
 import { useCurrentUser } from "../../hooks/useCurrentUser";
 import { Avatar, Badge, Button } from "../ui";
+import { SetStatusDialog } from "../user/SetStatusDialog";
 
 const roleVariant = { owner: "amber", admin: "blue", member: "gray" } as const;
 
@@ -37,7 +38,7 @@ function formatPresence(presence: PresenceEntry | undefined): { label: string; o
 export function UserProfileSidebar({ userId, onClose, onSendMessage, style }: UserProfileSidebarProps) {
   const user = useCurrentUser();
   const { workspaceSlug } = useParams<{ workspaceSlug: string }>();
-  const { listMembers } = useWorkspaceMembersApi(user);
+  const { listMembers } = useWorkspaceMembersApi();
   const { state } = useChatStore();
   const [member, setMember] = useState<Member | null>(null);
   const [loading, setLoading] = useState(true);
@@ -67,6 +68,12 @@ export function UserProfileSidebar({ userId, onClose, onSendMessage, style }: Us
   const presence = state.presence[userId];
   const presenceInfo = formatPresence(presence);
   const isOwnProfile = user?.id === userId;
+  const [statusDialogOpen, setStatusDialogOpen] = useState(false);
+
+  const statusExpired = presence?.statusExpiresAt
+    ? new Date(presence.statusExpiresAt).getTime() <= Date.now()
+    : false;
+  const hasStatus = presence && !statusExpired && (presence.statusEmoji || presence.statusText);
 
   return (
     <div
@@ -110,6 +117,12 @@ export function UserProfileSidebar({ userId, onClose, onSendMessage, style }: Us
               <div data-testid="profile-email" className="text-sm text-muted mt-0.5">
                 {member.email}
               </div>
+              {hasStatus && (
+                <div data-testid="profile-status" className="flex items-center justify-center gap-1.5 mt-2 text-sm text-muted">
+                  {presence.statusEmoji && <span>{presence.statusEmoji}</span>}
+                  {presence.statusText && <span>{presence.statusText}</span>}
+                </div>
+              )}
             </div>
 
             <Badge
@@ -131,6 +144,18 @@ export function UserProfileSidebar({ userId, onClose, onSendMessage, style }: Us
               Member since {new Date(member.joinedAt).toLocaleDateString(undefined, { month: "long", year: "numeric" })}
             </div>
 
+            {isOwnProfile && (
+              <Button
+                data-testid="profile-edit-status"
+                variant="ghost"
+                size="sm"
+                onClick={() => setStatusDialogOpen(true)}
+                className="mt-1"
+              >
+                {hasStatus ? "Edit Status" : "Set a status"}
+              </Button>
+            )}
+
             {!isOwnProfile && (
               <Button
                 data-testid="profile-send-message"
@@ -145,6 +170,14 @@ export function UserProfileSidebar({ userId, onClose, onSendMessage, style }: Us
           </div>
         )}
       </div>
+      {isOwnProfile && (
+        <SetStatusDialog
+          open={statusDialogOpen}
+          onOpenChange={setStatusDialogOpen}
+          currentEmoji={hasStatus ? (presence.statusEmoji ?? null) : null}
+          currentText={hasStatus ? (presence.statusText ?? null) : null}
+        />
+      )}
     </div>
   );
 }

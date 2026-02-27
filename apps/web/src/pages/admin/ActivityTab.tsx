@@ -13,10 +13,6 @@ import {
 import { useAdminApi } from "../../hooks/api/useAdminApi";
 import { Button } from "../../components/ui/button";
 
-interface AuthJsonUser {
-  getAuthJson: () => Promise<{ accessToken?: string | null }>;
-}
-
 interface Activity {
   messagesPerDay: { date: string; count: number }[];
   usersPerDay: { date: string; count: number }[];
@@ -29,8 +25,8 @@ const RANGES = [
   { label: "365d", days: 365 },
 ] as const;
 
-export function ActivityTab({ user }: { user: AuthJsonUser }) {
-  const { getActivity } = useAdminApi(user);
+export function ActivityTab() {
+  const { getActivity } = useAdminApi();
   const [days, setDays] = useState(30);
   const [activity, setActivity] = useState<Activity | null>(null);
 

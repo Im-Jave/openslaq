@@ -3,7 +3,7 @@ import { auth } from "../auth/middleware";
 import type { AuthEnv } from "../auth/types";
 import { getInviteByCode, acceptInvite } from "./invite-service";
 import { getWorkspaceById } from "./service";
-import { asWorkspaceId } from "@openslack/shared";
+import { asWorkspaceId } from "@openslaq/shared";
 import { rlInvitePreview, rlInviteAccept } from "../rate-limit";
 import { invitePreviewSchema, inviteAcceptSchema, errorSchema } from "../openapi/schemas";
 

@@ -8,10 +8,13 @@ import { CreateWorkspacePage } from "./pages/CreateWorkspace";
 import { InviteAcceptPage } from "./pages/InviteAccept";
 import { DemoPage } from "./pages/Demo";
 import { NotFoundPage } from "./pages/NotFound";
+import { DesktopPage } from "./pages/Desktop";
+import { HuddlePage } from "./pages/HuddlePage";
 import { SocketProvider } from "./socket/SocketProvider";
 import { ChatStoreProvider } from "./state/chat-store";
 import { ThemeProvider } from "./theme/ThemeProvider";
 import { TooltipProvider } from "./components/ui";
+import { DeepLinkListener } from "./hooks/useDeepLink";
 
 const GalleryPage = import.meta.env.DEV
   ? lazy(() => import("./gallery/GalleryPage").then((m) => ({ default: m.GalleryPage })))
@@ -49,38 +52,48 @@ export function App() {
       <BrowserRouter>
         <ThemeProvider>
           <TooltipProvider>
-          <Routes>
-            <Route path="/demo/*" element={<DemoPage />} />
-            <Route
-              path="/admin/*"
-              element={
-                <StackProvider app={stackApp}>
-                  <AdminPage />
-                </StackProvider>
-              }
-            />
-            <Route
-              path="*"
-              element={
-                <StackProvider app={stackApp}>
-                  <SocketProvider>
-                    <ChatStoreProvider>
-                      <StackTheme>
-                        <Routes>
-                          <Route path="/handler/*" element={<HandlerRoutes />} />
-                          <Route path="/invite/:code" element={<InviteAcceptPage />} />
-                          <Route path="/w/:workspaceSlug/*" element={<HomePage />} />
-                          <Route path="/create-workspace" element={<CreateWorkspacePage />} />
-                          <Route path="/" element={<WorkspaceListPage />} />
-                          <Route path="*" element={<NotFoundPage />} />
-                        </Routes>
-                      </StackTheme>
-                    </ChatStoreProvider>
-                  </SocketProvider>
-                </StackProvider>
-              }
-            />
-          </Routes>
+            <Routes>
+              <Route path="/demo/*" element={<DemoPage />} />
+              <Route path="/desktop" element={<DesktopPage />} />
+              <Route
+                path="/huddle/:channelId"
+                element={
+                  <StackProvider app={stackApp}>
+                    <HuddlePage />
+                  </StackProvider>
+                }
+              />
+              <Route
+                path="/admin/*"
+                element={
+                  <StackProvider app={stackApp}>
+                    <AdminPage />
+                  </StackProvider>
+                }
+              />
+              <Route
+                path="*"
+                element={
+                  <StackProvider app={stackApp}>
+                    <DeepLinkListener />
+                    <SocketProvider>
+                      <ChatStoreProvider>
+                        <StackTheme>
+                          <Routes>
+                            <Route path="/handler/*" element={<HandlerRoutes />} />
+                            <Route path="/invite/:code" element={<InviteAcceptPage />} />
+                            <Route path="/w/:workspaceSlug/*" element={<HomePage />} />
+                            <Route path="/create-workspace" element={<CreateWorkspacePage />} />
+                            <Route path="/" element={<WorkspaceListPage />} />
+                            <Route path="*" element={<NotFoundPage />} />
+                          </Routes>
+                        </StackTheme>
+                      </ChatStoreProvider>
+                    </SocketProvider>
+                  </StackProvider>
+                }
+              />
+            </Routes>
           </TooltipProvider>
         </ThemeProvider>
       </BrowserRouter>

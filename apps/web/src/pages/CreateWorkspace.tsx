@@ -12,7 +12,7 @@ export function CreateWorkspacePage() {
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
-  const { createWorkspace } = useWorkspacesApi(user);
+  const { createWorkspace } = useWorkspacesApi();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,13 +39,13 @@ export function CreateWorkspacePage() {
       {/* Navbar */}
       <nav className="sticky top-0 z-10 bg-surface border-b border-border-default">
         <div className="max-w-4xl mx-auto px-6 h-14 flex items-center justify-between">
-          <Link to="/" className="text-lg font-bold text-primary no-underline">OpenSlack</Link>
+          <Link to="/" className="text-lg font-bold text-primary no-underline">OpenSlaq</Link>
           <CustomUserButton />
         </div>
       </nav>
 
       <main className="max-w-md mx-auto px-6 py-16">
-        <Link to="/" className="text-sm text-slack-blue hover:underline mb-6 inline-block no-underline" data-testid="back-to-workspaces">
+        <Link to="/" className="text-sm text-slaq-blue hover:underline mb-6 inline-block no-underline" data-testid="back-to-workspaces">
           &larr; Back to workspaces
         </Link>
 

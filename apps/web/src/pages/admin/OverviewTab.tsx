@@ -10,10 +10,6 @@ import {
 } from "recharts";
 import { useAdminApi } from "../../hooks/api/useAdminApi";
 
-interface AuthJsonUser {
-  getAuthJson: () => Promise<{ accessToken?: string | null }>;
-}
-
 interface Stats {
   users: number;
   workspaces: number;
@@ -37,8 +33,8 @@ const STAT_LABELS: { key: keyof Stats; label: string }[] = [
   { key: "reactions", label: "Reactions" },
 ];
 
-export function OverviewTab({ user }: { user: AuthJsonUser }) {
-  const { getStats, getActivity } = useAdminApi(user);
+export function OverviewTab() {
+  const { getStats, getActivity } = useAdminApi();
   const [stats, setStats] = useState<Stats | null>(null);
   const [activity, setActivity] = useState<Activity | null>(null);
 

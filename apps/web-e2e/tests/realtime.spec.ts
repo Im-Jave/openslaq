@@ -1,7 +1,34 @@
-import { expect } from "@playwright/test";
+import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { test, addMemberViaInvite } from "./helpers/test-workspace";
 import { setupMockAuth } from "./helpers/mock-auth";
 import { SECOND_USER } from "./helpers/api";
+
+async function openSecondUserSession(page: Page, workspaceSlug: string): Promise<{
+  context: BrowserContext;
+  page: Page;
+}> {
+  const browser = page.context().browser();
+  if (!browser) {
+    throw new Error("Browser instance is unavailable");
+  }
+
+  const secondContext = await browser.newContext();
+  const secondPage = await secondContext.newPage();
+  await setupMockAuth(secondPage, {
+    id: SECOND_USER.userId,
+    displayName: SECOND_USER.displayName,
+    email: SECOND_USER.email,
+  });
+  await secondPage.goto(`/w/${workspaceSlug}`);
+  return { context: secondContext, page: secondPage };
+}
+
+async function typeInComposer(page: Page, text: string): Promise<void> {
+  const editor = page.locator(".tiptap");
+  await expect(editor).toBeVisible();
+  await editor.click();
+  await page.keyboard.type(text);
+}
 
 test.describe("Multi-user message visibility", () => {
   test("message from another user is visible", async ({ page, testWorkspace }) => {
@@ -125,5 +152,74 @@ test.describe("Multi-user message visibility", () => {
         return page.getByTestId("thread-panel").getByText(replyContent).isVisible().catch(() => false);
       }, { timeout: 20000 })
       .toBe(true);
+  });
+
+  test("shows and expires typing indicator in channels", async ({ page, testWorkspace }) => {
+    await addMemberViaInvite(testWorkspace.api, SECOND_USER, testWorkspace.slug);
+
+    await setupMockAuth(page);
+    await page.goto(`/w/${testWorkspace.slug}`);
+    await page.getByText("# general").click();
+
+    const secondSession = await openSecondUserSession(page, testWorkspace.slug);
+
+    try {
+      await secondSession.page.getByText("# general").click();
+      await expect(page.getByTestId("typing-indicator")).toHaveCount(0);
+
+      await typeInComposer(secondSession.page, `typing-channel-${Date.now()}`);
+
+      await expect(page.getByTestId("typing-indicator")).toContainText(`${SECOND_USER.displayName} is typing...`);
+      await expect(page.getByTestId("typing-indicator")).toHaveCount(0, { timeout: 8000 });
+    } finally {
+      await secondSession.context.close();
+    }
+  });
+
+  test("shows typing indicator in DMs", async ({ page, testWorkspace }) => {
+    await addMemberViaInvite(testWorkspace.api, SECOND_USER, testWorkspace.slug);
+    await testWorkspace.api.createDm(SECOND_USER.userId);
+
+    await setupMockAuth(page);
+    await page.goto(`/w/${testWorkspace.slug}`);
+    await page.getByRole("button", { name: new RegExp(`^${SECOND_USER.displayName}`) }).click();
+    await expect(page.locator(".tiptap")).toBeVisible();
+
+    const secondSession = await openSecondUserSession(page, testWorkspace.slug);
+    try {
+      await secondSession.page.getByRole("button", { name: /^Test User/ }).click();
+      await expect(secondSession.page.locator(".tiptap")).toBeVisible();
+
+      await typeInComposer(secondSession.page, `typing-dm-${Date.now()}`);
+
+      await expect(page.getByTestId("typing-indicator")).toContainText(`${SECOND_USER.displayName} is typing...`);
+    } finally {
+      await secondSession.context.close();
+    }
+  });
+
+  test("keeps typing indicator out of thread panel", async ({ page, testWorkspace }) => {
+    await addMemberViaInvite(testWorkspace.api, SECOND_USER, testWorkspace.slug);
+    const channel = await testWorkspace.api.getChannelByName("general");
+    const parentContent = `typing-thread-parent-${Date.now()}`;
+    await testWorkspace.api.createMessage(channel.id, parentContent);
+
+    await setupMockAuth(page);
+    await page.goto(`/w/${testWorkspace.slug}`);
+    await page.getByText("# general").click();
+    await page.getByText(parentContent).hover();
+    await page.getByTestId("reply-action-trigger").click();
+    await expect(page.getByTestId("thread-panel")).toBeVisible();
+
+    const secondSession = await openSecondUserSession(page, testWorkspace.slug);
+    try {
+      await secondSession.page.getByText("# general").click();
+      await typeInComposer(secondSession.page, `typing-thread-${Date.now()}`);
+
+      await expect(page.getByTestId("typing-indicator")).toContainText(`${SECOND_USER.displayName} is typing...`);
+      await expect(page.getByTestId("thread-panel").getByTestId("typing-indicator")).toHaveCount(0);
+    } finally {
+      await secondSession.context.close();
+    }
   });
 });

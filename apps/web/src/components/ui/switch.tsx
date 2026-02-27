@@ -10,7 +10,7 @@ const Switch = forwardRef<
     ref={ref}
     className={clsx(
       "inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full transition-colors",
-      "data-[state=checked]:bg-slack-blue data-[state=unchecked]:bg-surface-tertiary",
+      "data-[state=checked]:bg-slaq-blue data-[state=unchecked]:bg-surface-tertiary",
       "disabled:cursor-not-allowed disabled:opacity-50",
       className,
     )}

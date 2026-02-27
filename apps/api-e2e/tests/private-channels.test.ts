@@ -18,7 +18,7 @@ describe("private channels", () => {
     const memberCtx = await createTestClient({
       id: `priv-member-${testId()}`,
       displayName: "Private Channel Member",
-      email: `priv-member-${testId()}@openslack.dev`,
+      email: `priv-member-${testId()}@openslaq.dev`,
     });
     memberClient = memberCtx.client;
     memberId = memberCtx.user.id;
@@ -160,6 +160,34 @@ describe("private channels", () => {
     expect(membersRes.status).toBe(200);
   });
 
+  test("cannot add non-workspace user to private channel (400)", async () => {
+    const name = `add-outsider-${testId()}`;
+    const createRes = await ownerClient.api.workspaces[":slug"].channels.$post({
+      param: { slug },
+      json: { name, type: "private" },
+    });
+    expect(createRes.status).toBe(201);
+    const channel = (await createRes.json()) as { id: string };
+
+    const outsider = await createTestClient({
+      id: `priv-outsider-${testId()}`,
+      displayName: "Private Outsider",
+      email: `priv-outsider-${testId()}@openslaq.dev`,
+    });
+
+    const addRes = await ownerClient.api.workspaces[":slug"].channels[":id"].members.$post({
+      param: { slug, id: channel.id },
+      json: { userId: outsider.user.id },
+    });
+    expect(addRes.status).toBe(400);
+
+    // Outsider should still not see the private channel.
+    const listRes = await outsider.client.api.workspaces[":slug"].channels.$get({
+      param: { slug },
+    });
+    expect(listRes.status as number).toBe(403);
+  });
+
   test("remove member — member can no longer see channel", async () => {
     const name = `rm-mem-${testId()}`;
     const createRes = await ownerClient.api.workspaces[":slug"].channels.$post({
@@ -205,7 +233,7 @@ describe("private channels", () => {
     const thirdCtx = await createTestClient({
       id: `priv-third-${testId()}`,
       displayName: "Third User",
-      email: `priv-third-${testId()}@openslack.dev`,
+      email: `priv-third-${testId()}@openslaq.dev`,
     });
     await addToWorkspace(ownerClient, slug, thirdCtx.client);
 
@@ -231,12 +259,49 @@ describe("private channels", () => {
     expect(removeRes.status).toBe(400);
   });
 
+  test("private channel message access via /api/messages/:id", async () => {
+    const name = `priv-msg-access-${testId()}`;
+    const createRes = await ownerClient.api.workspaces[":slug"].channels.$post({
+      param: { slug },
+      json: { name, type: "private" },
+    });
+    const channel = (await createRes.json()) as { id: string };
+
+    // Owner sends a message in private channel
+    const msgRes = await ownerClient.api.workspaces[":slug"].channels[":id"].messages.$post({
+      param: { slug, id: channel.id },
+      json: { content: `priv-msg-${testId()}` },
+    });
+    expect(msgRes.status).toBe(201);
+    const msg = (await msgRes.json()) as { id: string };
+
+    // Non-member tries GET /api/messages/:id → 404
+    const nonMemberRes = await memberClient.api.messages[":id"].$get({
+      param: { id: msg.id },
+    });
+    expect(nonMemberRes.status).toBe(404);
+
+    // Add member to private channel
+    await ownerClient.api.workspaces[":slug"].channels[":id"].members.$post({
+      param: { slug, id: channel.id },
+      json: { userId: memberId },
+    });
+
+    // Now member can access → 200
+    const memberRes = await memberClient.api.messages[":id"].$get({
+      param: { id: msg.id },
+    });
+    expect(memberRes.status).toBe(200);
+    const body = (await memberRes.json()) as { id: string };
+    expect(body.id).toBe(msg.id);
+  });
+
   test("workspace admin can manage members even if not creator", async () => {
     // Promote memberClient to admin
     const adminCtx = await createTestClient({
       id: `priv-admin-${testId()}`,
       displayName: "Admin User",
-      email: `priv-admin-${testId()}@openslack.dev`,
+      email: `priv-admin-${testId()}@openslaq.dev`,
     });
     await addToWorkspace(ownerClient, slug, adminCtx.client);
     // Promote to admin
@@ -261,7 +326,7 @@ describe("private channels", () => {
     });
     // Workspace owner can also manage since they're admin+
     // Owner needs to be a member first
-    const ownerUserId = (await ownerClient.api.workspaces[":slug"].members.$get({ param: { slug } })
+    const ownerUserId = (await ownerClient.api.workspaces[":slug"].members.$get({ param: { slug }, query: {} })
       .then(r => r.json()) as { id: string; role: string }[])
       .find(m => m.role === "owner")?.id;
 

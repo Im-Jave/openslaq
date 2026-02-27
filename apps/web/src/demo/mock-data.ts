@@ -1,5 +1,5 @@
-import type { Attachment, Channel, Message } from "@openslack/shared";
-import { asChannelId, asMessageId, asUserId } from "@openslack/shared";
+import type { Attachment, Channel, Message } from "@openslaq/shared";
+import { asChannelId, asMessageId, asUserId } from "@openslaq/shared";
 import type { DmConversation, PresenceEntry, WorkspaceInfo } from "../state/chat-store";
 import type { GalleryMockData, MockUser } from "../gallery/gallery-context";
 import {
@@ -36,6 +36,8 @@ export const DEMO_CHANNELS: Channel[] = [
     name: "support",
     type: "public",
     description: "Customer support and triage",
+    displayName: null,
+    isArchived: false,
     createdBy: asUserId(USER_IDS.alice),
     createdAt: new Date(NOW - 1000 * 60 * 60 * 24).toISOString(),
   },
@@ -50,6 +52,8 @@ export const DEMO_DMS: DmConversation[] = [
       name: "dm",
       type: "dm",
       description: null,
+      displayName: null,
+      isArchived: false,
       createdBy: null,
       createdAt: new Date(NOW - 1000 * 60 * 60 * 12).toISOString(),
     },
@@ -86,6 +90,7 @@ function mkMessage(params: {
     latestReplyAt: params.latestReplyAt ?? null,
     attachments: params.attachments ?? [],
     reactions: [],
+    mentions: [],
     createdAt,
     updatedAt: createdAt,
   };

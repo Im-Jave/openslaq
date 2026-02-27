@@ -4,7 +4,7 @@ import { useGalleryMode } from "../../gallery/gallery-context";
 import { api } from "../../api";
 import { authorizedRequest } from "../../lib/api-client";
 import { useChatStore } from "../../state/chat-store";
-import type { Message } from "@openslack/shared";
+import type { Message } from "@openslaq/shared";
 
 export function useScrollToMessage(
   currentChannelId: string | null,

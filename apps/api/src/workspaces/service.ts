@@ -6,8 +6,8 @@ import { workspaceInvites } from "./invite-schema";
 import { channels, channelMembers } from "../channels/schema";
 import { channelReadPositions } from "../channels/read-positions-schema";
 import { messages } from "../messages/schema";
-import type { Workspace, WorkspaceId, UserId, Role } from "@openslack/shared";
-import { asWorkspaceId, ROLES, DEFAULT_CHANNELS } from "@openslack/shared";
+import type { Workspace, WorkspaceId, UserId, Role } from "@openslaq/shared";
+import { asWorkspaceId, ROLES, DEFAULT_CHANNELS } from "@openslaq/shared";
 
 function toWorkspace(row: typeof workspaces.$inferSelect): Workspace {
   return {
@@ -57,7 +57,7 @@ export async function getWorkspacesForUser(userId: UserId): Promise<WorkspaceWit
     name: row.name,
     slug: row.slug,
     createdAt: row.createdAt.toISOString(),
-    role: row.role as Role,
+    role: row.role,
     memberCount: countMap.get(row.id) ?? 0,
   }));
 }

@@ -1,9 +1,11 @@
 import { OpenAPIHono, createRoute, z } from "@hono/zod-openapi";
 import { auth } from "../auth/middleware";
 import { createAttachment } from "./service";
+import { getPresignedDownloadUrl } from "./s3";
 import { MAX_FILE_SIZE, MAX_FILES_PER_REQUEST, isAllowedMimeType } from "./validation";
 import { rlFileUpload } from "../rate-limit";
 import { uploadResponseSchema, errorSchema } from "../openapi/schemas";
+import { jsonResponse } from "../openapi/responses";
 
 const uploadRoute = createRoute({
   method: "post",
@@ -77,7 +79,18 @@ const app = new OpenAPIHono().openapi(uploadRoute, async (c) => {
     results.push(attachment);
   }
 
-  return c.json({ attachments: results } as any, 201);
+  return jsonResponse(c, {
+    attachments: results.map((attachment) => ({
+      id: attachment.id,
+      messageId: attachment.messageId,
+      filename: attachment.filename,
+      mimeType: attachment.mimeType,
+      size: attachment.size,
+      uploadedBy: attachment.uploadedBy,
+      createdAt: attachment.createdAt.toISOString(),
+      downloadUrl: getPresignedDownloadUrl(attachment.storageKey),
+    })),
+  }, 201);
 });
 
 export default app;

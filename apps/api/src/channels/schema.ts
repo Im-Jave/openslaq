@@ -1,6 +1,8 @@
-import { pgTable, text, timestamp, uuid, primaryKey, unique, index } from "drizzle-orm/pg-core";
+import { boolean, pgTable, text, timestamp, uuid, primaryKey, unique, index, pgEnum } from "drizzle-orm/pg-core";
 import { workspaces } from "../workspaces/schema";
 import { users } from "../users/schema";
+
+export const channelTypeEnum = pgEnum("channel_type", ["public", "private", "dm", "group_dm"]);
 
 export const channels = pgTable(
   "channels",
@@ -11,7 +13,9 @@ export const channels = pgTable(
       .references(() => workspaces.id),
     name: text("name").notNull(),
     description: text("description"),
-    type: text("type").notNull().default("public"), // "public" | "private" | "dm"
+    displayName: text("display_name"),
+    type: channelTypeEnum("type").notNull().default("public"),
+    isArchived: boolean("is_archived").default(false).notNull(),
     createdBy: text("created_by").references(() => users.id),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
@@ -23,10 +27,10 @@ export const channelMembers = pgTable(
   {
     channelId: uuid("channel_id")
       .notNull()
-      .references(() => channels.id),
+      .references(() => channels.id, { onDelete: "cascade" }),
     userId: text("user_id")
       .notNull()
-      .references(() => users.id),
+      .references(() => users.id, { onDelete: "cascade" }),
     joinedAt: timestamp("joined_at").defaultNow().notNull(),
   },
   (t) => [

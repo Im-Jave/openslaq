@@ -1,7 +1,8 @@
 import { afterAll } from "bun:test";
 import { createServer } from "node:net";
+import { cleanupTestWorkspaces } from "./helpers/api-client";
 
-process.env.E2E_TEST_SECRET ??= "openslack-e2e-test-secret-do-not-use-in-prod";
+process.env.E2E_TEST_SECRET ??= "openslaq-e2e-test-secret-do-not-use-in-prod";
 process.env.VITE_STACK_PROJECT_ID ??= "924565c5-6377-44b7-aa75-6b7de8d311f4";
 process.env.ADMIN_USER_IDS = "admin-test-user";
 process.env.API_ARTIFICIAL_DELAY_MS ??= "0";
@@ -61,6 +62,7 @@ const server = Bun.serve({
 
 process.env.API_BASE_URL = `http://127.0.0.1:${server.port}`;
 
-afterAll(() => {
+afterAll(async () => {
+  await cleanupTestWorkspaces();
   server.stop(true);
 });

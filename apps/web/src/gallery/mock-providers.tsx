@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { useEffect } from "react";
 import { MemoryRouter } from "react-router-dom";
-import type { Message } from "@openslack/shared";
+import type { Message } from "@openslaq/shared";
 import { SocketContext, type SocketContextValue } from "../socket/SocketProvider";
 import { ChatStoreProvider, useChatStore } from "../state/chat-store";
 import type { WorkspaceInfo, DmConversation, PresenceEntry } from "../state/chat-store";
@@ -12,7 +12,7 @@ import {
   type GalleryMockData,
   type MockUser,
 } from "./gallery-context";
-import type { Channel } from "@openslack/shared";
+import type { Channel } from "@openslaq/shared";
 
 // ── Noop socket value ──
 
@@ -61,6 +61,7 @@ function StateSeeder({ config }: { config: SeedConfig }) {
       channels: config.channels,
       workspaces: config.workspaces,
       dms: config.dms,
+      groupDms: [],
     });
 
     // 2. Seed channel messages

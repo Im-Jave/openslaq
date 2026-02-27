@@ -8,9 +8,10 @@ import {
   getUserHuddleChannel,
   getActiveHuddlesForChannels,
   removeUserFromAllHuddles,
+  setHuddleMessageId,
   _resetForTests,
 } from "../../api/src/huddle/service";
-import { asChannelId, asUserId } from "@openslack/shared";
+import { asChannelId, asUserId } from "@openslaq/shared";
 
 const channel1 = asChannelId("huddle-ch-1");
 const channel2 = asChannelId("huddle-ch-2");
@@ -30,7 +31,11 @@ describe("huddle service", () => {
       expect(huddle.participants).toHaveLength(1);
       expect(huddle.participants[0]!.userId).toBe(user1);
       expect(huddle.participants[0]!.isMuted).toBe(false);
+      expect(huddle.participants[0]!.isCameraOn).toBe(false);
+      expect(huddle.participants[0]!.isScreenSharing).toBe(false);
       expect(huddle.startedAt).toBeTruthy();
+      expect(huddle.livekitRoom).toBeTruthy();
+      expect(huddle.screenShareUserId).toBeNull();
     });
 
     test("returns existing huddle and adds user if huddle already exists", () => {
@@ -111,6 +116,17 @@ describe("huddle service", () => {
       leaveHuddle(user1);
       expect(getUserHuddleChannel(user1)).toBeNull();
     });
+
+    test("clears screenShareUserId when screen-sharing user leaves", () => {
+      startHuddle(channel1, user1);
+      const huddle = getHuddleForChannel(channel1)!;
+      huddle.screenShareUserId = user1;
+
+      const result = leaveHuddle(user1);
+
+      expect(result.ended).toBe(true);
+      expect(getHuddleForChannel(channel1)).toBeNull();
+    });
   });
 
   describe("setMuted", () => {
@@ -186,6 +202,41 @@ describe("huddle service", () => {
       startHuddle(channel1, user1);
       const result = removeUserFromAllHuddles(user1);
       expect(result.ended).toBe(true);
+    });
+  });
+
+  describe("messageId and participantHistory", () => {
+    test("startHuddle initializes messageId as null", () => {
+      const huddle = startHuddle(channel1, user1);
+      expect(huddle.messageId).toBeNull();
+    });
+
+    test("setHuddleMessageId stores messageId on huddle", () => {
+      startHuddle(channel1, user1);
+      setHuddleMessageId(channel1, "msg-123");
+      const huddle = getHuddleForChannel(channel1);
+      expect(huddle!.messageId).toBe("msg-123");
+    });
+
+    test("leaveHuddle returns messageId and participantHistory when huddle ends", () => {
+      startHuddle(channel1, user1);
+      joinHuddle(channel1, user2);
+      setHuddleMessageId(channel1, "msg-456");
+      leaveHuddle(user2);
+      const result = leaveHuddle(user1);
+      expect(result.ended).toBe(true);
+      expect(result.messageId).toBe("msg-456");
+      expect(result.startedAt).toBeTruthy();
+      expect(result.participantHistory).toContain(user1);
+      expect(result.participantHistory).toContain(user2);
+    });
+
+    test("leaveHuddle returns null messageId when no message was set", () => {
+      startHuddle(channel1, user1);
+      const result = leaveHuddle(user1);
+      expect(result.ended).toBe(true);
+      expect(result.messageId).toBeNull();
+      expect(result.participantHistory).toContain(user1);
     });
   });
 

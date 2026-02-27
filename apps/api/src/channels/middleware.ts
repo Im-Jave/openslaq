@@ -1,6 +1,6 @@
 import { createMiddleware } from "hono/factory";
-import { asChannelId, CHANNEL_TYPES, ROLES } from "@openslack/shared";
-import type { Channel } from "@openslack/shared";
+import { asChannelId, CHANNEL_TYPES, ROLES } from "@openslaq/shared";
+import type { Channel } from "@openslaq/shared";
 import type { WorkspaceMemberEnv } from "../workspaces/role-middleware";
 import { getChannelById, isChannelMember } from "./service";
 import { hasMinimumRole } from "../auth/permissions";
@@ -12,7 +12,11 @@ export type ChannelEnv = WorkspaceMemberEnv & {
 };
 
 export const resolveChannel = createMiddleware<ChannelEnv>(async (c, next) => {
-  const channelId = asChannelId(c.req.param("id")!);
+  const idParam = c.req.param("id");
+  if (!idParam) {
+    return c.json({ error: "Channel not found" }, 404);
+  }
+  const channelId = asChannelId(idParam);
   const workspace = c.get("workspace");
 
   const channel = await getChannelById(channelId);
@@ -20,8 +24,8 @@ export const resolveChannel = createMiddleware<ChannelEnv>(async (c, next) => {
     return c.json({ error: "Channel not found" }, 404);
   }
 
-  // For private channels, hide from non-members (return 404, not 403)
-  if (channel.type === CHANNEL_TYPES.PRIVATE) {
+  // For private channels and group DMs, hide from non-members (return 404, not 403)
+  if (channel.type === CHANNEL_TYPES.PRIVATE || channel.type === CHANNEL_TYPES.GROUP_DM) {
     const user = c.get("user");
     const isMember = await isChannelMember(channel.id, user.id);
     if (!isMember) {

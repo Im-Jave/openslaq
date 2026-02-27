@@ -11,14 +11,14 @@ describe("unread counts", () => {
     const ctx1 = await createTestClient({
       id: `unread-user1-${testId()}`,
       displayName: "Unread User 1",
-      email: `unread1-${testId()}@openslack.dev`,
+      email: `unread1-${testId()}@openslaq.dev`,
     });
     client1 = ctx1.client;
 
     const ctx2 = await createTestClient({
       id: `unread-user2-${testId()}`,
       displayName: "Unread User 2",
-      email: `unread2-${testId()}@openslack.dev`,
+      email: `unread2-${testId()}@openslaq.dev`,
     });
     client2 = ctx2.client;
 

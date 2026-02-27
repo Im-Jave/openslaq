@@ -1,10 +1,10 @@
-import type { Channel, Message, SearchResultItem } from "@openslack/shared";
+import type { Channel, Message, SearchResultItem } from "@openslaq/shared";
 import {
   asUserId,
   asWorkspaceId,
   asChannelId,
   asMessageId,
-} from "@openslack/shared";
+} from "@openslaq/shared";
 import type {
   WorkspaceInfo,
   DmConversation,
@@ -51,6 +51,8 @@ export const MOCK_CHANNELS: Channel[] = [
     name: "general",
     type: "public",
     description: "Company-wide announcements",
+    displayName: null,
+    isArchived: false,
     createdBy: YOU_ID,
     createdAt: "2025-01-01T00:00:00Z",
   },
@@ -60,6 +62,8 @@ export const MOCK_CHANNELS: Channel[] = [
     name: "engineering",
     type: "public",
     description: "Engineering discussions",
+    displayName: null,
+    isArchived: false,
     createdBy: YOU_ID,
     createdAt: "2025-01-02T00:00:00Z",
   },
@@ -69,6 +73,8 @@ export const MOCK_CHANNELS: Channel[] = [
     name: "random",
     type: "public",
     description: "Water cooler chat",
+    displayName: null,
+    isArchived: false,
     createdBy: ALICE_ID,
     createdAt: "2025-01-03T00:00:00Z",
   },
@@ -84,6 +90,8 @@ export const MOCK_DMS: DmConversation[] = [
       name: "dm",
       type: "dm",
       description: null,
+      displayName: null,
+      isArchived: false,
       createdBy: null,
       createdAt: "2025-02-01T00:00:00Z",
     },
@@ -157,6 +165,7 @@ function msg(
     latestReplyAt: null,
     attachments: [],
     reactions: [],
+    mentions: [],
     senderDisplayName: sender,
     senderAvatarUrl: null,
     createdAt: ts,
@@ -166,7 +175,7 @@ function msg(
 }
 
 export const MOCK_GENERAL_MESSAGES: Message[] = [
-  msg("msg-1", "ch-general", "user-alice", "Hey everyone! Welcome to Acme Corp's new Slack workspace. Excited to have the team here.", "Alice Park", 120),
+  msg("msg-1", "ch-general", "user-alice", "Hey everyone! Welcome to Acme Corp's new Slaq workspace. Excited to have the team here.", "Alice Park", 120),
   msg("msg-2", "ch-general", "user-bob", "Thanks Alice! Great to be here. Quick question — where should we post **engineering updates**?", "Bob Chen", 110),
   msg("msg-3", "ch-general", "user-alice", "Good question! Let's use #engineering for technical discussions and keep #general for company-wide announcements.", "Alice Park", 105),
   msg("msg-4", "ch-general", "user-you", "Sounds good! I just pushed the initial deploy. Here's the status:\n\n```\n✓ API server: healthy\n✓ Database: connected\n✓ WebSocket: active\n```\n\nAll systems go!", "You", 90),

@@ -1,5 +1,5 @@
 {
-  "name": "@openslack/api-e2e",
+  "name": "@openslaq/api-e2e",
   "private": true,
   "type": "module",
   "scripts": {
@@ -7,10 +7,12 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
-    "@openslack/api": "workspace:*",
-    "@openslack/shared": "workspace:*",
+    "@openslaq/api": "workspace:*",
+    "@openslaq/shared": "workspace:*",
+    "@openslaq/test-utils": "workspace:*",
     "hono": "^4.7.4",
-    "jose": "^6.0.8"
+    "jose": "^6.0.8",
+    "socket.io-client": "^4.8.1"
   },
   "devDependencies": {
     "@types/bun": "^1.2.4",

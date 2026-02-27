@@ -34,7 +34,7 @@ test.describe("Dark mode", () => {
 
     // Set dark mode before navigating
     await page.addInitScript(() => {
-      localStorage.setItem("openslack-theme", "dark");
+      localStorage.setItem("openslaq-theme", "dark");
     });
 
     await openWorkspaceWithRetry(page, testWorkspace.slug);
@@ -49,7 +49,7 @@ test.describe("Dark mode", () => {
     await setupMockAuth(page);
 
     await page.addInitScript(() => {
-      localStorage.setItem("openslack-theme", "light");
+      localStorage.setItem("openslaq-theme", "light");
     });
 
     await openWorkspaceWithRetry(page, testWorkspace.slug);
@@ -64,7 +64,7 @@ test.describe("Dark mode", () => {
     await setupMockAuth(page);
 
     await page.addInitScript(() => {
-      localStorage.setItem("openslack-theme", "dark");
+      localStorage.setItem("openslaq-theme", "dark");
     });
 
     await openWorkspaceWithRetry(page, testWorkspace.slug);
@@ -129,7 +129,7 @@ test.describe("Dark mode", () => {
 
     // Clear any stored theme and emulate dark system preference
     await page.addInitScript(() => {
-      localStorage.removeItem("openslack-theme");
+      localStorage.removeItem("openslaq-theme");
     });
     await page.emulateMedia({ colorScheme: "dark" });
 

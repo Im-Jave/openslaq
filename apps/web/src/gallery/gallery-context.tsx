@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import type { SearchResultItem } from "@openslack/shared";
+import type { SearchResultItem } from "@openslaq/shared";
 import type { WorkspaceInfo } from "../hooks/api/useWorkspacesApi";
 
 /** When true, hooks skip API calls and use pre-seeded store data. */

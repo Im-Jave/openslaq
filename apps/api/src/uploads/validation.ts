@@ -5,7 +5,6 @@ const ALLOWED_MIME_PREFIXES = [
   "image/",
   "video/",
   "audio/",
-  "text/",
 ];
 
 const ALLOWED_MIME_TYPES = new Set([
@@ -19,9 +18,15 @@ const ALLOWED_MIME_TYPES = new Set([
   "application/vnd.ms-powerpoint",
   "application/vnd.openxmlformats-officedocument.presentationml.presentation",
   "application/json",
+  "text/plain",
+  "text/csv",
+  "text/markdown",
+  "text/tab-separated-values",
 ]);
 
 export function isAllowedMimeType(mimeType: string): boolean {
-  if (ALLOWED_MIME_TYPES.has(mimeType)) return true;
-  return ALLOWED_MIME_PREFIXES.some((prefix) => mimeType.startsWith(prefix));
+  // Strip parameters like charset (e.g. "text/plain;charset=utf-8" → "text/plain")
+  const baseType = mimeType.split(";")[0]!.trim();
+  if (ALLOWED_MIME_TYPES.has(baseType)) return true;
+  return ALLOWED_MIME_PREFIXES.some((prefix) => baseType.startsWith(prefix));
 }

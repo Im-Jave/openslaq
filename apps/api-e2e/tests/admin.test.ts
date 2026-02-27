@@ -4,7 +4,7 @@ import { createTestClient, testId } from "./helpers/api-client";
 // Admin client always uses the same id and email to avoid unique constraint issues
 const ADMIN_USER = {
   id: "admin-test-user",
-  email: "admin-test@openslack.dev",
+  email: "admin-test@openslaq.dev",
   displayName: "Admin Test User",
 };
 
@@ -13,7 +13,7 @@ describe("admin", () => {
     const id = testId();
     const { client } = await createTestClient({
       id: `non-admin-${id}`,
-      email: `non-admin-${id}@openslack.dev`,
+      email: `non-admin-${id}@openslaq.dev`,
     });
     const res = await client.api.admin.check.$get();
     expect(res.status).toBe(200);
@@ -33,7 +33,7 @@ describe("admin", () => {
     const id = testId();
     const { client } = await createTestClient({
       id: `non-admin-stats-${id}`,
-      email: `non-admin-stats-${id}@openslack.dev`,
+      email: `non-admin-stats-${id}@openslaq.dev`,
     });
     const res = await client.api.admin.stats.$get();
     expect(res.status).toBe(403);
@@ -89,7 +89,7 @@ describe("admin", () => {
     // Create the searchable user and make an API call to trigger upsert
     const { client: searchableClient } = await createTestClient({
       id: `searchable-${testId()}`,
-      email: `${uniqueName}-target@openslack.dev`,
+      email: `${uniqueName}-target@openslaq.dev`,
       displayName: `Searchable ${uniqueName}`,
     });
     // Trigger auth middleware to upsert the user
@@ -162,5 +162,22 @@ describe("admin", () => {
     expect(res.status).toBe(500);
     const body = (await res.json()) as { error: string };
     expect(typeof body.error).toBe("string");
+  });
+
+  test("/impersonate returns 503 when STACK_SECRET_SERVER_KEY not set", async () => {
+    const { env } = await import("../../api/src/env");
+    const original = env.STACK_SECRET_SERVER_KEY;
+    env.STACK_SECRET_SERVER_KEY = undefined;
+    try {
+      const { client } = await createTestClient(ADMIN_USER);
+      const res = await client.api.admin.impersonate[":userId"].$post({
+        param: { userId: "test-user" },
+      });
+      expect(res.status).toBe(503);
+      const body = (await res.json()) as { error: string };
+      expect(body.error).toContain("unavailable");
+    } finally {
+      env.STACK_SECRET_SERVER_KEY = original;
+    }
   });
 });

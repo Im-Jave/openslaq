@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { users } from "../users/schema";
 import { workspaceMembers } from "../workspaces/schema";
+import { isStatusExpired } from "../users/service";
 
 // In-memory tracking: userId → Set of socket IDs
 const connectedSockets = new Map<string, Set<string>>();
@@ -52,20 +53,36 @@ export async function getUserWorkspaceIds(userId: string): Promise<string[]> {
 
 export async function getWorkspacePresence(
   workspaceId: string,
-): Promise<Array<{ userId: string; online: boolean; lastSeenAt: string | null }>> {
+): Promise<Array<{
+  userId: string;
+  online: boolean;
+  lastSeenAt: string | null;
+  statusEmoji: string | null;
+  statusText: string | null;
+  statusExpiresAt: string | null;
+}>> {
   const members = await db
     .select({
       userId: workspaceMembers.userId,
       lastSeenAt: users.lastSeenAt,
+      statusEmoji: users.statusEmoji,
+      statusText: users.statusText,
+      statusExpiresAt: users.statusExpiresAt,
     })
     .from(workspaceMembers)
     .innerJoin(users, eq(workspaceMembers.userId, users.id))
     .where(eq(workspaceMembers.workspaceId, workspaceId));
 
   const onlineIds = getOnlineUserIds();
-  return members.map((m) => ({
-    userId: m.userId,
-    online: onlineIds.has(m.userId),
-    lastSeenAt: m.lastSeenAt?.toISOString() ?? null,
-  }));
+  return members.map((m) => {
+    const expired = isStatusExpired(m.statusExpiresAt);
+    return {
+      userId: m.userId,
+      online: onlineIds.has(m.userId),
+      lastSeenAt: m.lastSeenAt?.toISOString() ?? null,
+      statusEmoji: expired ? null : (m.statusEmoji ?? null),
+      statusText: expired ? null : (m.statusText ?? null),
+      statusExpiresAt: expired ? null : (m.statusExpiresAt?.toISOString() ?? null),
+    };
+  });
 }
